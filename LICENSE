@@ -1,0 +1,29 @@
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+WaveStream is licensed under the GNU General Public License v3.0,
+inheriting the license of its upstream projects CloudStream and Nuvio.
+
+The full text of the license is available at:
+https://www.gnu.org/licenses/gpl-3.0.txt
+
+For the complete license text, see:
+https://www.gnu.org/licenses/gpl-3.0.html
+
+---
+
+A short summary of GPL-3.0 (not a substitute for the full text):
+
+  * You may use, study, modify and redistribute this software.
+  * If you redistribute the software (or a modified version), you must
+    do so under the same GPL-3.0 license, including making the source
+    code available to recipients.
+  * Any derivative work that links to or incorporates this software
+    must also be released under GPL-3.0.
+  * The software is provided "as is", without warranty of any kind.
+
+For attribution and credits, see the README.md "Credits" section.
