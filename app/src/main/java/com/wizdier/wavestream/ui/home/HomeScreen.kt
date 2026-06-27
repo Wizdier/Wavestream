@@ -107,7 +107,7 @@ fun HomeScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background.copy(alpha = topBarAlpha),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    actionIconColor = MaterialTheme.colorScheme.onBackground
+                    actionIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         }
