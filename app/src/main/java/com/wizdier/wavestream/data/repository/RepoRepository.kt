@@ -167,8 +167,11 @@ class RepoRepository(private val dao: RepoDao) {
             runCatching {
                 val pluginsJson = fetchJson(pluginsUrl)
                 val pluginsRoot = json.parseToJsonElement(pluginsJson).jsonObject
-                val list = parseVersionsArray(pluginsRoot["versions"] ?: return@runCatching emptyList())
-                all.addAll(list)
+                val versionsElement = pluginsRoot["versions"]
+                if (versionsElement != null) {
+                    val list = parseVersionsArray(versionsElement)
+                    all.addAll(list)
+                }
             }
         }
         return all
