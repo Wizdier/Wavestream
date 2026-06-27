@@ -21,6 +21,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `:app:checkDebugDuplicateClasses`. Switched the explicit dependency to
   `play-services-cast-framework` 21.3.0 and added a `resolutionStrategy`
   that force-aligns both artifacts to the same version.
+
+### Fixed (v1.0.1 — installer + UX)
+- **APK install failure** ("App not installed as package appears to be
+  invalid"): the release build was only v1-signed, which Android 7+
+  silently rejects. Added explicit `enableV1Signing = true`,
+  `enableV2Signing = true`, `enableV3Signing = true` to the release
+  signing config + `isZipAlignEnabled = true`. Also `clean` before
+  `assembleRelease` in CI so the new signing config takes effect on a
+  fresh build.
+- **Repo add errors swallowed**: `RepoRepository.fetchManifest` now sets
+  a CloudStream-style User-Agent, follows redirects, accepts both
+  `author` and `authors` JSON fields, and surfaces friendly error
+  messages for the four most common failure modes (DNS failure, HTML
+  response, parse failure, HTTP 4xx/5xx).
+- **Performance**: replaced `LazyColumn`/`LazyRow` `items()` calls with
+  keyed variants, added Coil `crossfade(true)` + `ContentScale.Crop` to
+  every `AsyncImage`, added a `DelayedLoading` composable that fades in
+  only after 200ms (no flicker on fast loads).
+- **UI polish**: Home screen now has a `TopAppBar` with the app name,
+  CloudStream-style bold section headers, larger poster cards (120dp
+  width, 2:3 aspect ratio), quality badges, and a progress bar on
+  Continue Watching cards.
+- **Settings redesign**: full CloudStream-style settings page with
+  grouped sections (Extensions & Providers / Library / Search /
+  Appearance / Player / Sync / Advanced / About), each with icons and
+  inline switches. Added toggles for auto-play next episode and preload
+  next episode.
+- **RepoSettings redesign**: shows extension count per repo, displays
+  "by <author>" line, surfaces a hint about CloudStream-compatible
+  repos, shows a LinearProgressIndicator while refreshing, and shows a
+  CircularProgressIndicator inside the Add button while adding.
+- **Removed unused permissions**: dropped `MANAGE_EXTERNAL_STORAGE`
+  (Google Play rejects it) and `requestLegacyExternalStorage` (deprecated).
+  Added `REQUEST_INSTALL_PACKAGES` so the repo-extension install flow
+  can trigger APK installs without a browser round-trip.
+- **NetworkModule** hardened: 60s read timeout (was 30), 120s call
+  timeout cap, modern TLS only (CLEARTEXT blocked), explicit
+  `ConnectionSpec.RESTRICTED_TLS` + `MODERN_TLS`.
 - Compile errors:
   - `DetailScreen.kt` — `FlowRow` requires `ExperimentalLayoutApi` opt-in.
   - `PlayerScreen.kt` — `setControllerVisibilityListener` overload

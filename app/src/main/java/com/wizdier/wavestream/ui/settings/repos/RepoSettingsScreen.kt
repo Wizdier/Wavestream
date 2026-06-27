@@ -18,11 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -42,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wizdier.wavestream.R
 import com.wizdier.wavestream.data.db.entities.RepoEntity
@@ -59,6 +62,7 @@ fun RepoSettingsScreen(
     val extensions by viewModel.extensions.collectAsState()
     val error by viewModel.error.collectAsState()
     val adding by viewModel.adding.collectAsState()
+    val refreshing by viewModel.refreshing.collectAsState()
     var input by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -82,38 +86,62 @@ fun RepoSettingsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // Add repo form
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    placeholder = { Text(stringResource(R.string.repos_hint)) },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    enabled = !adding
-                )
-                IconButton(
-                    onClick = {
-                        if (input.isNotBlank()) {
-                            viewModel.add(input)
-                            input = ""
-                        }
-                    },
-                    enabled = !adding && input.isNotBlank()
+            // Add-repo form with example URL hint
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.repos_add))
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        placeholder = { Text(stringResource(R.string.repos_hint)) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        enabled = !adding
+                    )
+                    IconButton(
+                        onClick = {
+                            if (input.isNotBlank()) {
+                                viewModel.add(input)
+                                input = ""
+                            }
+                        },
+                        enabled = !adding && input.isNotBlank()
+                    ) {
+                        if (adding) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.padding(8.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.repos_add))
+                        }
+                    }
                 }
+                Text(
+                    text = "Tip: paste any CloudStream-compatible repo.json URL. " +
+                        "Try the example URLs at https://github.com/recloudstream/cloudstream/blob/master/docs/repo.md",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
+
+            if (refreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                )
+            }
+
             HorizontalDivider()
 
             if (repos.isEmpty()) {
-                EmptyState(message = stringResource(R.string.repos_empty))
+                EmptyState(
+                    message = "No repositories added yet.\n\nAdd a CloudStream repo URL above to install provider extensions.",
+                    modifier = Modifier.fillMaxSize()
+                )
                 return@Scaffold
             }
 
@@ -128,13 +156,11 @@ fun RepoSettingsScreen(
                         onRefresh = { viewModel.refresh(repo.rowId) },
                         onRemove = { viewModel.remove(repo.rowId) },
                         onInstall = { apkUrl ->
-                            // Open the APK download URL in the browser; Android will
-                            // prompt the user to install once the download finishes.
-                            // Using Custom Tabs gives us a smoother in-app experience.
+                            // Open the APK URL in Chrome Custom Tabs so Android
+                            // can download it and prompt to install.
                             runCatching {
                                 CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(apkUrl))
                             }.onFailure {
-                                // Fallback to a plain VIEW intent if Custom Tabs isn't available.
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))
                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 context.startActivity(intent)
@@ -158,14 +184,22 @@ private fun RepoRow(
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(repo.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = repo.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     text = repo.url,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 repo.author?.let {
-                    Text(it, style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = "by $it",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             IconButton(onClick = onRefresh) {
@@ -175,24 +209,68 @@ private fun RepoRow(
                 Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete))
             }
         }
-        if (extensions.isNotEmpty()) {
+
+        if (extensions.isEmpty()) {
+            Text(
+                text = "Tap refresh to load available extensions",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else {
             Spacer(Modifier.height(8.dp))
+            Text(
+                text = "${extensions.size} extension${if (extensions.size != 1) "s" else ""} available",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
             extensions.forEach { ext ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "• ${ext.name} v${ext.version}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        ext.description?.let {
-                            Text(it, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                    TextButton(onClick = { onInstall(ext.apk) }) {
-                        Text(stringResource(R.string.repos_install))
-                    }
-                }
+                ExtensionRow(ext = ext, onInstall = { onInstall(ext.apk) })
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionRow(
+    ext: RepoExtension,
+    onInstall: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Download,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(end = 12.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = ext.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "v${ext.version}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            ext.description?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        TextButton(onClick = onInstall) {
+            Text(stringResource(R.string.repos_install))
         }
     }
 }

@@ -191,6 +191,70 @@ CloudStream, Nuvio, or their providers.
 
 ---
 
+## 🚀 Releasing APKs
+
+Releases are fully automated via GitHub Actions. Tagging a commit with
+`v*` triggers a build that:
+
+1. Decodes the signing keystore from the `KEYSTORE_BASE64` repository secret.
+2. Builds a signed `app-release.apk`.
+3. Generates a `sha256` checksum alongside it.
+4. Publishes a GitHub Release with both files attached, using the
+   `CHANGELOG.md` contents as the release body.
+
+### One-time setup
+
+Generate a keystore locally (keep this file safe — the same keystore must
+sign every future release or users won't be able to update in place):
+
+```bash
+keytool -genkey -v -keystore wavestream.keystore \
+  -alias wavestream -keyalg RSA -keysize 2048 -validity 10000
+base64 -w 0 wavestream.keystore > keystore.b64
+```
+
+Add these repository secrets at
+`Settings → Secrets and variables → Actions`:
+
+| Secret | Value |
+|--------|-------|
+| `KEYSTORE_BASE64`   | contents of `keystore.b64` |
+| `KEYSTORE_PASSWORD` | keystore password |
+| `KEY_ALIAS`         | `wavestream` |
+| `KEY_PASSWORD`      | key password |
+
+**Never commit `wavestream.keystore` or `keystore.b64`** — they're in
+`.gitignore` already.
+
+### Publishing a release
+
+```bash
+# Update versionCode / versionName in app/build.gradle.kts first
+git commit -am "Bump to v1.1.0"
+git tag -a v1.1.0 -m "WaveStream v1.1.0"
+git push origin v1.1.0
+```
+
+GitHub Actions takes it from there. The release appears at
+`https://github.com/wizdier/wavestream/releases/tag/v1.1.0` within a
+few minutes, signed APK attached.
+
+### Manual release (fallback)
+
+If CI is broken and you need to ship immediately:
+
+```bash
+export KEYSTORE_FILE=$PWD/wavestream.keystore
+export KEYSTORE_PASSWORD='...'
+export KEY_ALIAS=wavestream
+export KEY_PASSWORD='...'
+./gradlew :app:assembleRelease
+# Then draft a release on GitHub and attach
+# app/build/outputs/apk/release/app-release.apk
+```
+
+---
+
 ## 📜 License
 
 WaveStream is released under the **GPL-3.0** license — see

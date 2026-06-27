@@ -28,26 +28,31 @@ class RepoSettingsViewModel(
     private val _adding = MutableStateFlow(false)
     val adding: StateFlow<Boolean> = _adding.asStateFlow()
 
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
     fun add(url: String) {
         viewModelScope.launch {
             _adding.value = true
             runCatching { repo.add(url.trim()) }
                 .onSuccess { entity ->
                     _error.value = null
-                    // Eagerly load the extensions list so the user sees the
-                    // installable providers immediately after adding the repo.
+                    // Eagerly fetch extensions so the user sees the installable
+                    // providers immediately after adding the repo.
                     refresh(entity.rowId)
                 }
-                .onFailure { _error.value = it.message ?: "Failed to add repository" }
+                .onFailure { _error.value = friendlyError(it) }
             _adding.value = false
         }
     }
 
     fun refresh(rowId: Long) {
         viewModelScope.launch {
+            _refreshing.value = true
             runCatching { repo.refresh(rowId) }
                 .onSuccess { exts -> _extensions.value = _extensions.value + (rowId to exts) }
-                .onFailure { _error.value = it.message ?: "Failed to refresh repository" }
+                .onFailure { _error.value = friendlyError(it) }
+            _refreshing.value = false
         }
     }
 
@@ -58,6 +63,27 @@ class RepoSettingsViewModel(
                     // Drop the cached extensions for the removed repo.
                     _extensions.value = _extensions.value - rowId
                 }
+                .onFailure { _error.value = friendlyError(it) }
+        }
+    }
+
+    private fun friendlyError(t: Throwable): String {
+        val msg = t.message ?: t::class.simpleName ?: "Unknown error"
+        return when {
+            msg.contains("Unable to resolve host", true) ||
+                msg.contains("UnknownHost", true) ->
+                "Couldn't reach that URL — check your internet connection."
+            msg.contains("Failed to parse", true) ->
+                "That URL didn't return valid JSON. Make sure it points to a raw repo.json file."
+            msg.contains("Got HTML", true) ->
+                "That URL returned a web page, not a JSON file. Use the raw URL (e.g. raw.githubusercontent.com/...)."
+            msg.contains("HTTP 4", true) ->
+                "The server rejected the request ($msg). The repo URL may be wrong or private."
+            msg.contains("HTTP 5", true) ->
+                "The repo server had an error ($msg). Try again later."
+            msg.contains("already added", true) ->
+                "That repository is already in your list."
+            else -> msg
         }
     }
 }

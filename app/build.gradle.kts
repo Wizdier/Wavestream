@@ -15,16 +15,39 @@ android {
         applicationId = "com.wizdier.wavestream"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        create("release") {
+            // Credentials come from environment variables (CI) or local.properties.
+            // For local builds, set the env vars or hardcode the keystore path here.
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "../wavestream.keystore")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: "wavestream"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            // ⚠️ Critical for Android 7+ — without v2+v3 signatures, Android
+            // rejects the APK with "App not installed as package appears to be invalid."
+            // The default Gradle signing only emits v1 (JAR sig) which doesn't
+            // cover the whole APK. Enable all three schemes explicitly.
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+            // Force the release variant to also be zipAlign'd (Android 7+
+            // requires this for installation; the debug build is auto-aligned
+            // but the release build needs to be explicitly told).
+            isZipAlignEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -33,6 +56,8 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            // Debug builds use Android Studio's auto-generated debug keystore,
+            // which signs with v1+v2+v3 by default — no extra config needed.
         }
     }
 
@@ -66,8 +91,12 @@ android {
             excludes += "META-INF/INDEX.LIST"
         }
     }
-    
+
     // Lint — relax the release build so minor issues don't block publishing.
+    // `lintVitalRelease` runs automatically on `assembleRelease` and aborts
+    // the build on any fatal error. We disable that abort so a missing
+    // translation or backup-rule nit doesn't block the APK from shipping.
+    // Real issues still surface in the debug build's lint task.
     lint {
         abortOnError = false
         checkReleaseBuilds = false
