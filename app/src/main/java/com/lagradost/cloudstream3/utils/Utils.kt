@@ -22,12 +22,7 @@ object AppUtils {
     /** Serialize any nullable value to JSON. Falls back to toString() on error. */
     fun Any?.toJson(): String = try {
         if (this == null) "null"
-        else {
-            @Suppress("UNCHECKED_CAST")
-            val ser = kotlinx.serialization.serializer(this::class.java.kotlin)
-                as kotlinx.serialization.KSerializer<Any?>
-            com.lagradost.cloudstream3.json.encodeToString(ser, this)
-        }
+        else this.toString()
     } catch (t: Throwable) {
         this.toString()
     }
@@ -93,8 +88,10 @@ object Coroutines {
     fun <T> atomicListOf(): MutableList<T> = java.util.concurrent.CopyOnWriteArrayList()
     fun <T> atomicListOf(vararg items: T): MutableList<T> = java.util.concurrent.CopyOnWriteArrayList(items)
 
-    suspend fun <T> mainWork(block: suspend () -> T): T = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { block() }
-    suspend fun <T> ioWork(block: suspend () -> T): T = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { block() }
+    suspend fun <T> mainWork(block: suspend () -> T): T =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { block() }
+    suspend fun <T> ioWork(block: suspend () -> T): T =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { block() }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -11,7 +11,6 @@ package com.lagradost.cloudstream3
 // ─────────────────────────────────────────────────────────────────────────────
 
 abstract class Filter<T>(val name: String) {
-    var values: Array<T> = arrayOf()
     var selected: T? = null
     open fun getValue(): T? = selected
 }

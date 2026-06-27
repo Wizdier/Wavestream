@@ -70,6 +70,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = koinViewModel()
 ) {
     val dynamicColor by viewModel.dynamicColor.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
     val swipeGestures by viewModel.swipeGestures.collectAsState()
     val autoPip by viewModel.autoPip.collectAsState()
     val skipIntro by viewModel.skipIntro.collectAsState()

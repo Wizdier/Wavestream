@@ -18,7 +18,7 @@ import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
 
-    private val settingsRepo: SettingsRepository by inject
+    private val settingsRepo: SettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()

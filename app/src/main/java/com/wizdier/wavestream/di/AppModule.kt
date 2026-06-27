@@ -26,6 +26,7 @@ import com.wizdier.wavestream.ui.history.HistoryViewModel
 import com.wizdier.wavestream.ui.home.HomeViewModel
 import com.wizdier.wavestream.ui.player.PlayerViewModel
 import com.wizdier.wavestream.ui.search.SearchViewModel
+import com.wizdier.wavestream.ui.settings.SettingsViewModel
 import com.wizdier.wavestream.ui.settings.repos.RepoSettingsViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModelOf
@@ -83,5 +84,5 @@ val appModule = module {
     viewModelOf(::HistoryViewModel)
     viewModelOf(::PlayerViewModel)
     viewModelOf(::RepoSettingsViewModel)
-    viewModelOf(::com.wizdier.wavestream.ui.settings.SettingsViewModel)
+    viewModelOf(::SettingsViewModel)
 }

@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -115,9 +114,6 @@ fun HomeScreen(
             )
         }
     ) { padding ->
-        // Pull-to-refresh state
-        val pullToRefreshState = androidx.compose.material3.rememberPullToRefreshState()
-
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (isLoading && homeLists.isEmpty() && continueWatching.isEmpty()) {
                 ShimmerHome()
@@ -126,45 +122,24 @@ fun HomeScreen(
 
             if (error != null && homeLists.isEmpty()) {
                 EmptyState(
-                    message = "Couldn't load home: ${error}\n\nAdd a provider in Settings → Providers to start watching.",
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Outlined.Movie,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(56.dp)
-                        )
-                    }
+                    message = "Couldn't load home: ${error}\n\nAdd a provider in Settings → Providers to start watching."
                 )
                 return@Box
             }
 
             if (homeLists.isEmpty() && !isLoading && error == null) {
                 EmptyState(
-                    message = "No providers installed yet.\n\nAdd a provider repository in Settings → Providers to start watching.",
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Outlined.Movie,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(56.dp)
-                        )
-                    }
+                    message = "No providers installed yet.\n\nAdd a provider repository in Settings → Providers to start watching."
                 )
                 return@Box
             }
 
-            androidx.compose.material3.PullToRefreshBox(
-                isRefreshing = isLoading && homeLists.isNotEmpty(),
-                onRefresh = { viewModel.load() },
-                state = pullToRefreshState
+            LazyColumn(
+                state = scrollState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                LazyColumn(
-                    state = scrollState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                 // Continue Watching row (auto-hides if empty)
                 if (continueWatching.isNotEmpty()) {
                     item(key = "cw-header") {
@@ -202,7 +177,6 @@ fun HomeScreen(
                         items = list.items,
                         onClick = { onOpenDetail(it.providerId, it.url) }
                     )
-                }
                 }
             }
         }

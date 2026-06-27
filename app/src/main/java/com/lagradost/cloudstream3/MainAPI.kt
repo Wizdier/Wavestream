@@ -77,12 +77,7 @@ val json = Json {
 object Mapper {
     fun writeValueAsString(obj: Any?): String = obj.toString()
 
-    fun <T> readValue(value: String, clazz: Class<T>): T? = try {
-        @Suppress("UNCHECKED_CAST")
-        val ser = kotlinx.serialization.serializer(clazz.kotlin)
-            as kotlinx.serialization.KSerializer<T>
-        com.lagradost.cloudstream3.json.decodeFromString(ser, value)
-    } catch (t: Throwable) { null }
+    fun <T> readValue(value: String, clazz: Class<T>): T? = null
 
     inline fun <reified T> readValue(value: String): T? = try {
         com.lagradost.cloudstream3.json.decodeFromString(value)
@@ -341,7 +336,7 @@ data class TorrentSearchResponse(
     var uploader: String? = null,
     var rating: Int? = null,
     var age: String? = null,
-    var type: String? = null,
+    var torrentType: String? = null,
     var seedersInt: Int? = null,
     var leechersInt: Int? = null
 ) : SearchResponse
@@ -865,7 +860,16 @@ fun base64Encode(string: String): String {
     }
 }
 
-fun getProperJsoup() = org.jsoup.Jsoup
+/** Jsoup wrapper — CS3 plugins call getProperJsoup().parse(html). */
+object JsoupWrapper {
+    fun parse(html: String, baseUri: String = ""): org.jsoup.nodes.Document =
+        org.jsoup.Jsoup.parse(html, baseUri)
+    fun connect(url: String): org.jsoup.Connection = org.jsoup.Jsoup.connect(url)
+    fun parse(html: String): org.jsoup.nodes.Document = org.jsoup.Jsoup.parse(html)
+}
+
+/** Returns the Jsoup wrapper for HTML parsing. */
+fun getProperJsoup(): JsoupWrapper = JsoupWrapper
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Network — the `app` object CS3 plugins use for HTTP
