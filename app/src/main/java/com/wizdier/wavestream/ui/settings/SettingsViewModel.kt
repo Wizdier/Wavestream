@@ -16,6 +16,9 @@ class SettingsViewModel(
     val dynamicColor: StateFlow<Boolean> = repo.dynamicColor.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     fun setDynamicColor(v: Boolean) = viewModelScope.launch { repo.setDynamicColor(v) }
 
+    val themeMode: StateFlow<Int> = repo.themeMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    fun setThemeMode(v: Int) = viewModelScope.launch { repo.setThemeMode(v) }
+
     // Player
     val swipeGestures: StateFlow<Boolean> = repo.swipeGestures.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     fun setSwipeGestures(v: Boolean) = viewModelScope.launch { repo.setSwipeGestures(v) }

@@ -123,7 +123,7 @@ enum class TvType(val value: Int?) {
 
 enum class SearchQuality(val value: Int?) {
     Cam(1), CamRip(2), HdCam(3), Telesync(4), WorkPrint(5), Telecine(6),
-    HQ(7), HD(8), HDR(9), HDRiso(10), DolbyVision(11), 4K(12), 8K(13),
+    HQ(7), HD(8), HDR(9), HDRiso(10), DolbyVision(11), Q4K(12), Q8K(13),
     BluRay(14), DVD(15), Remux(16), SD(17), Unknown(null)
 }
 

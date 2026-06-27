@@ -53,6 +53,9 @@ val appModule = module {
     // Settings persistence (DataStore-backed)
     single { com.wizdier.wavestream.data.settings.SettingsRepository(androidContext()) }
 
+    // Backup / restore
+    single { com.wizdier.wavestream.data.backup.BackupManager(androidContext(), get(), get()) }
+
     // Repositories
     single { ProviderRepository(get()) }
     single { HistoryRepository(get()) }

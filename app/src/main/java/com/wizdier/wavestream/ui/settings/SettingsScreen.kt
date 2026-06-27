@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +43,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -135,10 +139,54 @@ fun SettingsScreen(
 
             // ─── Appearance ─────────────────────────────────────────
             SectionHeader("APPEARANCE", Icons.Outlined.Palette)
+            var themeDialogOpen by remember { mutableStateOf(false) }
             SettingsRow(
                 icon = Icons.Outlined.Brightness6,
-                title = stringResource(R.string.settings_dark_mode)
+                title = stringResource(R.string.settings_dark_mode),
+                subtitle = when (themeMode) { 1 -> "Light", 2 -> "Dark", else -> "System" },
+                onClick = { themeDialogOpen = true }
             )
+            if (themeDialogOpen) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { themeDialogOpen = false },
+                    title = { Text("Theme") },
+                    text = {
+                        Column {
+                            listOf(
+                                0 to "Follow system",
+                                1 to "Light",
+                                2 to "Dark"
+                            ).forEach { (mode, label) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.setThemeMode(mode)
+                                            themeDialogOpen = false
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = themeMode == mode,
+                                        onClick = {
+                                            viewModel.setThemeMode(mode)
+                                            themeDialogOpen = false
+                                        }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = { themeDialogOpen = false }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
             SettingsRow(
                 icon = Icons.Outlined.Palette,
                 title = stringResource(R.string.settings_dynamic_color),
@@ -185,11 +233,41 @@ fun SettingsScreen(
                 subtitle = subtitleLang.uppercase(),
                 onClick = { /* TODO: language picker dialog */ }
             )
+            var subtitleDialogOpen by remember { mutableStateOf(false) }
             SettingsRow(
                 title = "Font size",
                 subtitle = "${subtitleSize}sp",
-                onClick = { /* TODO: slider dialog */ }
+                onClick = { subtitleDialogOpen = true }
             )
+            if (subtitleDialogOpen) {
+                var sliderValue by remember { mutableStateOf(subtitleSize.toFloat()) }
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { subtitleDialogOpen = false },
+                    title = { Text("Subtitle font size") },
+                    text = {
+                        Column {
+                            Text("${sliderValue.toInt()}sp", style = MaterialTheme.typography.headlineSmall)
+                            androidx.compose.material3.Slider(
+                                value = sliderValue,
+                                onValueChange = { sliderValue = it },
+                                valueRange = 10f..32f,
+                                steps = 21
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            viewModel.setSubtitleSize(sliderValue.toInt())
+                            subtitleDialogOpen = false
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { subtitleDialogOpen = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
             HorizontalDivider()
 
             // ─── Sync ───────────────────────────────────────────────
@@ -218,6 +296,18 @@ fun SettingsScreen(
                 title = "NSFW content",
                 subtitle = "Show adult content in search results",
                 trailing = { Switch(checked = enableNsfw, onCheckedChange = { viewModel.setEnableNsfw(it) }) }
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Cloud,
+                title = "Backup",
+                subtitle = "Export favorites, history, and settings",
+                onClick = { /* TODO: trigger backup export via SAF */ }
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Cloud,
+                title = "Restore",
+                subtitle = "Import from a backup file",
+                onClick = { /* TODO: trigger file picker */ }
             )
             HorizontalDivider()
 

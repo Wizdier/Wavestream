@@ -24,6 +24,10 @@ class SettingsRepository(private val context: Context) {
     val dynamicColor: Flow<Boolean> = context.settingsDataStore.data.map { it[DYNAMIC_COLOR] ?: true }
     suspend fun setDynamicColor(value: Boolean) = context.settingsDataStore.edit { it[DYNAMIC_COLOR] = value }
 
+    /** 0 = System, 1 = Light, 2 = Dark */
+    val themeMode: Flow<Int> = context.settingsDataStore.data.map { it[THEME_MODE] ?: 0 }
+    suspend fun setThemeMode(value: Int) = context.settingsDataStore.edit { it[THEME_MODE] = value }
+
     // ── Player ─────────────────────────────────────────────────────────
 
     val swipeGestures: Flow<Boolean> = context.settingsDataStore.data.map { it[SWIPE_GESTURES] ?: true }
@@ -75,6 +79,7 @@ class SettingsRepository(private val context: Context) {
 
     companion object {
         private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+        private val THEME_MODE = intPreferencesKey("theme_mode")  // 0=System, 1=Light, 2=Dark
         private val SWIPE_GESTURES = booleanPreferencesKey("swipe_gestures")
         private val AUTO_PIP = booleanPreferencesKey("auto_pip")
         private val SKIP_INTRO = booleanPreferencesKey("skip_intro")
