@@ -143,7 +143,11 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.Brightness6,
                 title = stringResource(R.string.settings_dark_mode),
-                subtitle = when (themeMode) { 1 -> "Light", 2 -> "Dark", else -> "System" },
+                subtitle = when (themeMode) {
+                    1 -> "Light"
+                    2 -> "Dark"
+                    else -> "System"
+                },
                 onClick = { themeDialogOpen = true }
             )
             if (themeDialogOpen) {

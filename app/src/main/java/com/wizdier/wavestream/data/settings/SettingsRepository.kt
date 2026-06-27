@@ -77,6 +77,11 @@ class SettingsRepository(private val context: Context) {
     suspend fun setTraktToken(value: String) = context.settingsDataStore.edit { it[TRAKT_TOKEN] = value }
     suspend fun setMalToken(value: String) = context.settingsDataStore.edit { it[MAL_TOKEN] = value }
 
+    // ── Onboarding ─────────────────────────────────────────────────────
+
+    val onboardingCompleted: Flow<Boolean> = context.settingsDataStore.data.map { it[ONBOARDING_DONE] ?: false }
+    suspend fun setOnboardingCompleted(value: Boolean) = context.settingsDataStore.edit { it[ONBOARDING_DONE] = value }
+
     companion object {
         private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         private val THEME_MODE = intPreferencesKey("theme_mode")  // 0=System, 1=Light, 2=Dark
@@ -94,5 +99,6 @@ class SettingsRepository(private val context: Context) {
         private val ENABLE_NSFW = booleanPreferencesKey("enable_nsfw")
         private val TRAKT_TOKEN = stringPreferencesKey("trakt_token")
         private val MAL_TOKEN = stringPreferencesKey("mal_token")
+        private val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     }
 }

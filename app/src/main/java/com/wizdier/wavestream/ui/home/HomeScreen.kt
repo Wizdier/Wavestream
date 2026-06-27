@@ -115,7 +115,10 @@ fun HomeScreen(
             )
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Pull-to-refresh state
+        val pullToRefreshState = androidx.compose.material3.rememberPullToRefreshState()
+
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (isLoading && homeLists.isEmpty() && continueWatching.isEmpty()) {
                 ShimmerHome()
                 return@Box
@@ -151,12 +154,17 @@ fun HomeScreen(
                 return@Box
             }
 
-            LazyColumn(
-                state = scrollState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            androidx.compose.material3.PullToRefreshBox(
+                isRefreshing = isLoading && homeLists.isNotEmpty(),
+                onRefresh = { viewModel.load() },
+                state = pullToRefreshState
             ) {
+                LazyColumn(
+                    state = scrollState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 // Continue Watching row (auto-hides if empty)
                 if (continueWatching.isNotEmpty()) {
                     item(key = "cw-header") {
@@ -194,6 +202,7 @@ fun HomeScreen(
                         items = list.items,
                         onClick = { onOpenDetail(it.providerId, it.url) }
                     )
+                }
                 }
             }
         }

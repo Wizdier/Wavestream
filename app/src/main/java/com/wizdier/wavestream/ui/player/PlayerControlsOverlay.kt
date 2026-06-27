@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -289,6 +290,22 @@ fun PlayerControlsOverlay(
                     // Quality / settings picker
                     IconButton(onClick = { /* TODO: quality picker */ }) {
                         Icon(Icons.Outlined.Tune, contentDescription = "Settings", tint = Color.White)
+                    }
+
+                    // Sleep timer
+                    var sleepTimerOpen by remember { mutableStateOf(false) }
+                    IconButton(onClick = { sleepTimerOpen = true }) {
+                        Icon(Icons.Outlined.Bedtime, contentDescription = "Sleep timer", tint = Color.White)
+                    }
+                    if (sleepTimerOpen) {
+                        SleepTimerDialog(
+                            onDismiss = { sleepTimerOpen = false },
+                            onSet = { minutes ->
+                                // TODO: start actual timer — for now just dismiss
+                                sleepTimerOpen = false
+                            },
+                            onCancel = { /* TODO: cancel timer */ }
+                        )
                     }
 
                     // Next episode
