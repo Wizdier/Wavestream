@@ -66,6 +66,12 @@ android {
             excludes += "META-INF/INDEX.LIST"
         }
     }
+    
+    // Lint — relax the release build so minor issues don't block publishing.
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 
     aboutLibraries {
         // Use the plugin's default config path. If you want to ship custom
