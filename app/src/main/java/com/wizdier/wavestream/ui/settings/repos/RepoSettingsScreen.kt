@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -121,12 +122,23 @@ fun RepoSettingsScreen(
                     }
                 }
                 Text(
-                    text = "Tip: paste any CloudStream-compatible repo.json URL. " +
-                        "Try the example URLs at https://github.com/recloudstream/cloudstream/blob/master/docs/repo.md",
+                    text = "Paste any CloudStream-compatible repo.json URL above, or tap a popular repo below to add it:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+                // Popular verified CloudStream repos — tap to add.
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ExampleRepoChip("CloudStream Official", "https://raw.githubusercontent.com/recloudstream/extensions/master/repo.json", viewModel)
+                    ExampleRepoChip("CakesTwix (UK)", "https://raw.githubusercontent.com/CakesTwix/cloudstream-extensions-uk/master/repo.json", viewModel)
+                    ExampleRepoChip("Phisher", "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json", viewModel)
+                    ExampleRepoChip("Luna712", "https://raw.githubusercontent.com/Luna712/Luna712-CloudStream-Extensions/master/repo.json", viewModel)
+                    ExampleRepoChip("Redowan", "https://raw.githubusercontent.com/redowan99/Redowan-CloudStream/master/repo.json", viewModel)
+                }
             }
 
             if (refreshing) {
@@ -268,9 +280,37 @@ private fun ExtensionRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            // Show tvTypes if present (CloudStream classic style).
+            ext.tvTypes?.takeIf { it.isNotEmpty() }?.let { types ->
+                Text(
+                    text = "Types: ${types.joinToString(", ")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         TextButton(onClick = onInstall) {
             Text(stringResource(R.string.repos_install))
         }
     }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ExampleRepoChip(
+    label: String,
+    url: String,
+    viewModel: RepoSettingsViewModel
+) {
+    androidx.compose.material3.AssistChip(
+        onClick = { viewModel.add(url) },
+        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    )
 }
