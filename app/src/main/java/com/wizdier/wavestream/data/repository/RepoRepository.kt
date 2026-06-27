@@ -22,37 +22,50 @@ import java.io.IOException
 /**
  * Multi-repo support — CloudStream's killer feature, ported to WaveStream.
  *
- * A "repo" is a JSON manifest hosted anywhere (GitHub raw, jsdelivr, Codeberg,
- * GitLab, …) describing a list of provider extension APKs the user can install.
+ * CloudStream 3 repos come in TWO file shapes, and each can use either an
+ * inline `versions` array OR a `pluginLists` indirection:
  *
- * CloudStream repos come in TWO shapes that we must both handle:
- *
- * **Modern CloudStream (pluginLists — most common):**
- * ```
- * {
- *   "name": "Cloudstream providers repository",
- *   "description": "...",
- *   "manifestVersion": 1,
- *   "pluginLists": [
- *     "https://raw.githubusercontent.com/.../plugins.json"
- *   ]
- * }
- * ```
- * The actual extensions live in each `pluginLists` URL, which is itself a
- * JSON file with the same shape as the classic repo (see below). We have to
- * fetch each plugins.json URL recursively.
- *
- * **Classic CloudStream (versions inline — older format):**
+ * **Shape 1 — repo.json with `pluginLists` (modern CloudStream 3):**
  * ```
  * {
  *   "name": "My Repo",
- *   "tvTypes": ["TvSeries", "Movie"],
- *   "authors": ["..."],
- *   "versions": [
- *     { "name": "X", "version": "1.0", "apk": "url", "providerClass": "com.x.Y" }
+ *   "description": "...",
+ *   "manifestVersion": 1,
+ *   "pluginLists": [
+ *     "https://.../plugins.json"
  *   ]
  * }
  * ```
+ * The actual extensions live in each `pluginLists` URL.
+ *
+ * **Shape 2 — repo.json with inline `versions` (classic):**
+ * ```
+ * {
+ *   "name": "My Repo",
+ *   "versions": [ { ... }, { ... } ]
+ * }
+ * ```
+ *
+ * **plugins.json itself can be either:**
+ *   - A JSON array of extension objects (modern CloudStream 3 style — your repo
+ *     uses this format), OR
+ *   - A JSON object wrapping `versions: [...]` (older style)
+ *
+ * Extension objects have these fields (with multiple aliases for compat):
+ *   - `name`           (required) — display name
+ *   - `version`        (int or string)
+ *   - `url` OR `apk`   (required) — download URL for the .cs3 or .apk file
+ *   - `internalName`   — CloudStream 3 internal name (used by DexClassLoader)
+ *   - `providerClass`  — classic CloudStream provider class
+ *   - `description`
+ *   - `authors`        (array of strings)
+ *   - `tvTypes`        (array of strings: "Movie", "TvSeries", "Anime", ...)
+ *   - `language`       (ISO code)
+ *   - `iconUrl`        — provider icon URL
+ *   - `fileSize`       — bytes
+ *   - `fileHash`       — sha256-... for integrity check
+ *   - `apiVersion`     — int (CloudStream 3 uses 1)
+ *   - `status`         — 1 = active, 0 = disabled
  */
 class RepoRepository(private val dao: RepoDao) {
 
@@ -68,7 +81,6 @@ class RepoRepository(private val dao: RepoDao) {
 
     suspend fun add(url: String): RepoEntity = withContext(Dispatchers.IO) {
         val trimmed = url.trim().trimEnd('/').let {
-            // Auto-https if no scheme given.
             if (!it.startsWith("http://") && !it.startsWith("https://")) "https://$it" else it
         }
         if (dao.getByUrl(trimmed) != null) {
@@ -103,22 +115,31 @@ class RepoRepository(private val dao: RepoDao) {
 
     /**
      * Fetch and parse the repo manifest, recursively resolving `pluginLists`
-     * URLs to gather the actual extensions. CloudStream's modern repo format
-     * delegates to one or more `plugins.json` files via `pluginLists`.
+     * URLs to gather the actual extensions.
      */
     private fun fetchManifest(url: String): RepoManifest {
         val rawJson = fetchJson(url)
-        // Some repos wrap the manifest in a redirect or HTML page — bail early.
         if (rawJson.trimStart().startsWith("<")) {
             throw IOException("Got HTML instead of JSON. Check the URL — it should point to the raw repo.json file.")
         }
-        val root: JsonObject = try {
-            json.parseToJsonElement(rawJson).jsonObject
+        val rootElement = try {
+            json.parseToJsonElement(rawJson)
         } catch (e: Exception) {
             throw IOException("Failed to parse repo JSON: ${e.message ?: "invalid JSON"}")
         }
 
-        // Extract top-level fields.
+        // Case 1: top-level array of extensions (some plugins.json files use this).
+        if (rootElement is JsonArray) {
+            val versions = parseVersionsArray(rootElement)
+            return RepoManifest(
+                name = "Untitled Repository",
+                description = null,
+                versions = versions
+            )
+        }
+
+        val root = rootElement.jsonObject
+
         val name = root["name"]?.jsonPrimitive?.contentOrNull
             ?: root["Name"]?.jsonPrimitive?.contentOrNull
             ?: "Unnamed Repo"
@@ -131,9 +152,6 @@ class RepoRepository(private val dao: RepoDao) {
         val manifestVersion = root["manifestVersion"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
         val requiresApi = root["requiresApi"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
 
-        // Resolve the actual extension list. CloudStream repos use one of:
-        //   a) `versions` array (classic, inline)
-        //   b) `pluginLists` array of URLs (modern, indirect — we fetch each)
         val versions = resolveExtensions(root, url)
 
         return RepoManifest(
@@ -158,47 +176,77 @@ class RepoRepository(private val dao: RepoDao) {
         if (!inlineVersions.isNullOrEmpty()) return inlineVersions
 
         // Case B: modern pluginLists — fetch each one and merge.
-        val pluginLists = root["pluginLists"]?.jsonArray
-            ?: return emptyList()
+        val pluginLists = root["pluginLists"]?.jsonArray ?: return emptyList()
 
         val all = mutableListOf<RepoExtension>()
         for (entry in pluginLists) {
             val pluginsUrl = (entry as? JsonPrimitive)?.contentOrNull ?: continue
             runCatching {
                 val pluginsJson = fetchJson(pluginsUrl)
-                val pluginsRoot = json.parseToJsonElement(pluginsJson).jsonObject
-                val versionsElement = pluginsRoot["versions"]
-                if (versionsElement != null) {
-                    val list = parseVersionsArray(versionsElement)
-                    all.addAll(list)
+                val pluginsElement = json.parseToJsonElement(pluginsJson)
+                // plugins.json can be either a top-level array OR an object
+                // with a `versions` field — handle both.
+                val versionsList = when (pluginsElement) {
+                    is JsonArray -> parseVersionsArray(pluginsElement)
+                    is JsonObject -> parseVersionsArray(pluginsElement["versions"] ?: JsonArray(emptyList()))
+                    else -> emptyList()
                 }
+                all.addAll(versionsList)
             }
         }
         return all
     }
 
+    /**
+     * Parse a JSON array of extension objects into [RepoExtension]s.
+     * Accepts every known field-name variation across CloudStream 3 versions.
+     */
     private fun parseVersionsArray(element: JsonElement): List<RepoExtension> {
         val arr = element as? JsonArray ?: return emptyList()
         return arr.mapNotNull { item ->
             val obj = item as? JsonObject ?: return@mapNotNull null
-            val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val apk = obj["apk"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val providerClass = obj["providerClass"]?.jsonPrimitive?.contentOrNull
+
+            // Required: name + url (CloudStream 3) or apk (classic)
+            val name = obj["name"]?.jsonPrimitive?.contentOrNull
+                ?: obj["Name"]?.jsonPrimitive?.contentOrNull
+                ?: return@mapNotNull null
+            val downloadUrl = obj["url"]?.jsonPrimitive?.contentOrNull
+                ?: obj["apk"]?.jsonPrimitive?.contentOrNull
+                ?: obj["file"]?.jsonPrimitive?.contentOrNull
+                ?: return@mapNotNull null
+
+            // Provider class — CloudStream 3 uses `internalName`, classic uses
+            // `providerClass` or `class`. We accept all three.
+            val providerClass = obj["internalName"]?.jsonPrimitive?.contentOrNull
+                ?: obj["providerClass"]?.jsonPrimitive?.contentOrNull
                 ?: obj["class"]?.jsonPrimitive?.contentOrNull
-                ?: ""
+                ?: name
+
+            // Version can be int or string in CloudStream 3.
+            val version = obj["version"]?.let { v ->
+                (v as? JsonPrimitive)?.contentOrNull
+            } ?: "1"
+
             RepoExtension(
                 name = name,
-                version = obj["version"]?.jsonPrimitive?.contentOrNull ?: "1.0.0",
-                apk = apk,
+                version = version,
+                apk = downloadUrl,
                 providerClass = providerClass,
                 description = obj["description"]?.jsonPrimitive?.contentOrNull,
-                icon = obj["icon"]?.jsonPrimitive?.contentOrNull,
+                icon = obj["iconUrl"]?.jsonPrimitive?.contentOrNull
+                    ?: obj["icon"]?.jsonPrimitive?.contentOrNull,
                 tvTypes = (obj["tvTypes"] as? JsonArray)?.mapNotNull {
                     (it as? JsonPrimitive)?.contentOrNull
                 },
                 authors = (obj["authors"] as? JsonArray)?.mapNotNull {
                     (it as? JsonPrimitive)?.contentOrNull
-                }
+                },
+                language = obj["language"]?.jsonPrimitive?.contentOrNull,
+                fileSize = obj["fileSize"]?.jsonPrimitive?.contentOrNull?.toLongOrNull(),
+                fileHash = obj["fileHash"]?.jsonPrimitive?.contentOrNull,
+                apiVersion = obj["apiVersion"]?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
+                status = obj["status"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 1,
+                repositoryUrl = obj["repositoryUrl"]?.jsonPrimitive?.contentOrNull
             )
         }
     }
@@ -222,7 +270,6 @@ class RepoRepository(private val dao: RepoDao) {
     }
 
     companion object {
-        // Mimic CloudStream's user agent so community repos that filter by UA accept us.
         const val CloudStreamUserAgent =
             "Mozilla/5.0 (Linux; Android 11) CloudStream/3.2.0 WaveStream/1.0"
     }
@@ -245,10 +292,23 @@ data class RepoManifest(
 data class RepoExtension(
     val name: String,
     val version: String = "1.0.0",
-    val apk: String,
+    val apk: String,                  // download URL (.cs3 or .apk)
     val providerClass: String,
     val description: String? = null,
     val icon: String? = null,
     val tvTypes: List<String>? = null,
-    val authors: List<String>? = null
-)
+    val authors: List<String>? = null,
+    // CloudStream 3-specific fields
+    val language: String? = null,
+    val fileSize: Long? = null,
+    val fileHash: String? = null,     // sha256-... for integrity check
+    val apiVersion: Int? = null,
+    val status: Int = 1,              // 1 = active, 0 = disabled
+    val repositoryUrl: String? = null
+) {
+    /** True if this is a CloudStream 3 .cs3 file (vs. classic .apk). */
+    val isCs3: Boolean get() = apk.endsWith(".cs3", ignoreCase = true)
+
+    /** File extension to display ("cs3" or "apk"). */
+    val fileExtension: String get() = if (isCs3) "cs3" else "apk"
+}

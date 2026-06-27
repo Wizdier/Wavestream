@@ -92,7 +92,7 @@
     <!-- Repo settings -->
     <string name="repos_title">Provider repositories</string>
     <string name="repos_add">Add repository</string>
-    <string name="repos_hint">https://example.com/repo.json</string>
+    <string name="repos_hint">Paste repo.json URL</string>
     <string name="repos_empty">No repositories added yet.</string>
     <string name="repos_install">Install</string>
     <string name="repos_uninstall">Uninstall</string>

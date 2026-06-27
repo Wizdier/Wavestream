@@ -9,6 +9,7 @@ import com.wizdier.wavestream.data.db.dao.FavoritesDao
 import com.wizdier.wavestream.data.db.dao.HistoryDao
 import com.wizdier.wavestream.data.db.dao.RepoDao
 import com.wizdier.wavestream.data.db.dao.SearchHistoryDao
+import com.wizdier.wavestream.data.plugin.ExtensionInstaller
 import com.wizdier.wavestream.data.plugin.PluginLoader
 import com.wizdier.wavestream.data.repository.DownloadRepository
 import com.wizdier.wavestream.data.repository.FavoritesRepository
@@ -45,8 +46,9 @@ val appModule = module {
     single<RepoDao> { get<WaveStreamDatabase>().repoDao() }
     single<SearchHistoryDao> { get<WaveStreamDatabase>().searchHistoryDao() }
 
-    // Plugin loader
+    // Plugin loader + extension installer
     single { PluginLoader(androidContext()) }
+    single { ExtensionInstaller(androidContext()) }
 
     // Repositories
     single { ProviderRepository(get()) }

@@ -3,6 +3,7 @@ package com.wizdier.wavestream.ui.settings.repos
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wizdier.wavestream.data.db.entities.RepoEntity
+import com.wizdier.wavestream.data.plugin.ExtensionInstaller
 import com.wizdier.wavestream.data.repository.RepoExtension
 import com.wizdier.wavestream.data.repository.RepoRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +14,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class RepoSettingsViewModel(
-    private val repo: RepoRepository
+    private val repo: RepoRepository,
+    private val installer: ExtensionInstaller
 ) : ViewModel() {
 
     val repos: StateFlow<List<RepoEntity>> =
@@ -31,14 +33,16 @@ class RepoSettingsViewModel(
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
+    // Track which extensions are currently being downloaded.
+    private val _installing = MutableStateFlow<Set<String>>(emptySet())
+    val installing: StateFlow<Set<String>> = _installing.asStateFlow()
+
     fun add(url: String) {
         viewModelScope.launch {
             _adding.value = true
             runCatching { repo.add(url.trim()) }
                 .onSuccess { entity ->
                     _error.value = null
-                    // Eagerly fetch extensions so the user sees the installable
-                    // providers immediately after adding the repo.
                     refresh(entity.rowId)
                 }
                 .onFailure { _error.value = friendlyError(it) }
@@ -60,10 +64,23 @@ class RepoSettingsViewModel(
         viewModelScope.launch {
             runCatching { repo.remove(rowId) }
                 .onSuccess {
-                    // Drop the cached extensions for the removed repo.
                     _extensions.value = _extensions.value - rowId
                 }
                 .onFailure { _error.value = friendlyError(it) }
+        }
+    }
+
+    /**
+     * Download the extension file (.cs3 or .apk) and trigger Android's
+     * package installer. For .cs3 files we rename to .apk first since
+     * Android's installer rejects unknown extensions.
+     */
+    fun install(extension: RepoExtension) {
+        viewModelScope.launch {
+            _installing.value = _installing.value + extension.apk
+            runCatching { installer.install(extension) }
+                .onFailure { _error.value = "Install failed: ${it.message ?: "unknown error"}" }
+            _installing.value = _installing.value - extension.apk
         }
     }
 

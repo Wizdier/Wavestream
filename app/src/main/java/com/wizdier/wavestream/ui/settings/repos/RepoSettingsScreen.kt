@@ -1,8 +1,5 @@
 package com.wizdier.wavestream.ui.settings.repos
 
-import android.content.Intent
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -43,9 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wizdier.wavestream.R
 import com.wizdier.wavestream.data.db.entities.RepoEntity
@@ -64,9 +61,9 @@ fun RepoSettingsScreen(
     val error by viewModel.error.collectAsState()
     val adding by viewModel.adding.collectAsState()
     val refreshing by viewModel.refreshing.collectAsState()
+    val installing by viewModel.installing.collectAsState()
     var input by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
 
     // Surface repository errors as snackbars instead of a stale text banner.
     LaunchedEffect(error) {
@@ -133,6 +130,7 @@ fun RepoSettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    ExampleRepoChip("Wizdier BDIX", "https://raw.githubusercontent.com/Wizdier/Wizdier-CloudstreamRepo/main/repo.json", viewModel)
                     ExampleRepoChip("CloudStream Official", "https://raw.githubusercontent.com/recloudstream/extensions/master/repo.json", viewModel)
                     ExampleRepoChip("CakesTwix (UK)", "https://raw.githubusercontent.com/CakesTwix/cloudstream-extensions-uk/master/repo.json", viewModel)
                     ExampleRepoChip("Phisher", "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json", viewModel)
@@ -165,19 +163,10 @@ fun RepoSettingsScreen(
                     RepoRow(
                         repo = repo,
                         extensions = extensions[repo.rowId].orEmpty(),
+                        installing = installing,
                         onRefresh = { viewModel.refresh(repo.rowId) },
                         onRemove = { viewModel.remove(repo.rowId) },
-                        onInstall = { apkUrl ->
-                            // Open the APK URL in Chrome Custom Tabs so Android
-                            // can download it and prompt to install.
-                            runCatching {
-                                CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(apkUrl))
-                            }.onFailure {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                            }
-                        }
+                        onInstall = { ext -> viewModel.install(ext) }
                     )
                 }
             }
@@ -189,9 +178,10 @@ fun RepoSettingsScreen(
 private fun RepoRow(
     repo: RepoEntity,
     extensions: List<RepoExtension>,
+    installing: Set<String>,
     onRefresh: () -> Unit,
     onRemove: () -> Unit,
-    onInstall: (apkUrl: String) -> Unit
+    onInstall: (RepoExtension) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -238,7 +228,11 @@ private fun RepoRow(
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             extensions.forEach { ext ->
-                ExtensionRow(ext = ext, onInstall = { onInstall(ext.apk) })
+                ExtensionRow(
+                    ext = ext,
+                    isInstalling = ext.apk in installing,
+                    onInstall = { onInstall(ext) }
+                )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             }
         }
@@ -248,6 +242,7 @@ private fun RepoRow(
 @Composable
 private fun ExtensionRow(
     ext: RepoExtension,
+    isInstalling: Boolean,
     onInstall: () -> Unit
 ) {
     Row(
@@ -268,19 +263,47 @@ private fun ExtensionRow(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
-            Text(
-                text = "v${ext.version}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "v${ext.version}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // File type chip (cs3 or apk)
+                Text(
+                    text = ".${ext.fileExtension}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+                ext.language?.let { lang ->
+                    Text(
+                        text = lang.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (ext.fileSize != null && ext.fileSize > 0) {
+                    Text(
+                        text = "${ext.fileSize / 1024} KB",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             ext.description?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            // Show tvTypes if present (CloudStream classic style).
+            // Show tvTypes if present (CloudStream categorization).
             ext.tvTypes?.takeIf { it.isNotEmpty() }?.let { types ->
                 Text(
                     text = "Types: ${types.joinToString(", ")}",
@@ -288,9 +311,23 @@ private fun ExtensionRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            ext.authors?.takeIf { it.isNotEmpty() }?.let { authors ->
+                Text(
+                    text = "by ${authors.joinToString(", ")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-        TextButton(onClick = onInstall) {
-            Text(stringResource(R.string.repos_install))
+        TextButton(onClick = onInstall, enabled = !isInstalling) {
+            if (isInstalling) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(stringResource(R.string.repos_install))
+            }
         }
     }
 }
