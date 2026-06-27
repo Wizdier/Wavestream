@@ -74,7 +74,7 @@ object SubtitleHelper {
     fun getFlagFromIso(iso: String): String? {
         if (iso.length != 2) return null
         val flag = iso.uppercase().map { c ->
-            Character.toCodePoint(c) - Character.toCodePoint('A') + 0x1F1E6
+            c.code - 'A'.code + 0x1F1E6
         }.map { Character.toChars(it)[0] }.joinToString("")
         return flag
     }
