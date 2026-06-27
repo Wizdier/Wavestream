@@ -15,8 +15,8 @@ android {
         applicationId = "com.wizdier.wavestream"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "0.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -196,4 +196,16 @@ dependencies {
 
     // About libraries (used by the Credits screen)
     implementation(libs.about.libraries)
+
+    // CloudStream 3 compatibility shim — these libraries provide symbols
+    // that REAL .cs3 plugin .dex files reference at runtime (via the parent
+    // ClassLoader). Without them, DexClassLoader would throw
+    // NoClassDefFoundError the moment a plugin touches a Jackson mapper or
+    // kotlinx-datetime LocalDate. The actual com.lagradost.cloudstream3.*
+    // surface is provided by our own stub package under
+    // app/src/main/java/com/lagradost/cloudstream3/.
+    implementation(libs.jackson.annotations)
+    implementation(libs.jackson.databind)
+    implementation(libs.jackson.module.kotlin)
+    implementation(libs.kotlinx.datetime)
 }

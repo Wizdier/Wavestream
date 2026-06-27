@@ -89,4 +89,18 @@ class PlayerViewModel(
             )
         }
     }
+
+    /**
+     * Look up the last saved watch position for [providerId]+[url] from the
+     * history repository. Returns 0 if there's no history entry — caller
+     * should skip the seek in that case.
+     */
+    suspend fun getResumePosition(providerId: String, url: String): Long {
+        val itemId = HistoryRepository.composeItemId(providerId, url)
+        val entry = historyRepo.getByItemId(itemId) ?: return 0L
+        // Only resume if we're more than 5s in AND not within 10s of the end.
+        return if (entry.progressMs > 5_000 &&
+            (entry.durationMs == 0L || entry.progressMs < entry.durationMs - 10_000)
+        ) entry.progressMs else 0L
+    }
 }

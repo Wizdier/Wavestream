@@ -1,34 +1,27 @@
 package com.wizdier.wavestream.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,12 +38,9 @@ import coil.request.ImageRequest
 import com.wizdier.wavestream.data.api.SearchResponse
 
 /**
- * Standard poster card used across Home, Search, Favorites and Recommendations.
- * CloudStream-shaped, Nuvio-styled: 2:3 aspect ratio, gradient scrim over
- * the bottom for legible titles, optional rating pill in the corner.
- *
- * Performance: Coil's ImageRequest is built with crossfade + memory + disk
- * cache flags so scrolling is smooth even with hundreds of posters.
+ * Immersive poster card — CloudStream-shaped, Nuvio-styled.
+ * Presses scale the card down slightly (haptic-feel), the bottom scrim
+ * carries the title + year, and rating/quality badges float in corners.
  */
 @Composable
 fun MovieCard(
@@ -58,19 +48,40 @@ fun MovieCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "cardScale"
+    )
+
     Card(
         modifier = modifier
             .width(120.dp)
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp,
+            pressedElevation = 4.dp
+        )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
         ) {
+            // Poster image
             if (!item.posterUrl.isNullOrEmpty()) {
                 val context = LocalContext.current
                 val request = remember(item.posterUrl) {
@@ -86,14 +97,14 @@ fun MovieCard(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // Placeholder with initials when no poster.
+                // Gradient placeholder with initials
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.linearGradient(
                                 listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
                                     MaterialTheme.colorScheme.surfaceVariant
                                 )
                             )
@@ -109,14 +120,14 @@ fun MovieCard(
                 }
             }
 
-            // Rating pill
+            // Rating pill (top-right)
             item.rating?.let { rating ->
                 Box(
                     modifier = Modifier
                         .padding(6.dp)
                         .align(Alignment.TopEnd)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.95f))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
@@ -128,7 +139,7 @@ fun MovieCard(
                 }
             }
 
-            // Quality badge bottom-right
+            // Quality badge (bottom-right, above scrim)
             item.qualityLabel?.let { q ->
                 Box(
                     modifier = Modifier
@@ -147,7 +158,7 @@ fun MovieCard(
                 }
             }
 
-            // Bottom scrim + title (only if no quality label takes the corner)
+            // Bottom scrim + title (gradient from transparent to black)
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -191,73 +202,16 @@ fun MovieRow(
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
         ) {
             items(items, key = { it.url }) { item ->
                 MovieCard(item = item, onClick = { onClick(item) })
             }
-        }
-    }
-}
-
-/**
- * Compact loading indicator that fades in only after a short delay — avoids
- * flicker on fast loads. Used by HomeScreen and SearchScreen.
- */
-@Composable
-fun DelayedLoading(
-    isLoading: Boolean,
-    modifier: Modifier = Modifier,
-    delayMs: Long = 200
-) {
-    AnimatedVisibility(
-        visible = isLoading,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            androidx.compose.material3.CircularProgressIndicator()
-        }
-    }
-}
-
-@Composable
-fun EmptyState(
-    message: String,
-    modifier: Modifier = Modifier,
-    icon: @Composable (() -> Unit)? = null
-) {
-    Box(
-        modifier = modifier.fillMaxSize().padding(32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            icon?.invoke() ?: Icon(
-                imageVector = Icons.Outlined.PlayCircle,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(56.dp)
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
         }
     }
 }

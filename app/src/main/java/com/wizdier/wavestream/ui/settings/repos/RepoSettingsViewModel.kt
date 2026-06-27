@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wizdier.wavestream.data.db.entities.RepoEntity
 import com.wizdier.wavestream.data.plugin.ExtensionInstaller
+import com.wizdier.wavestream.data.plugin.PluginLoader
 import com.wizdier.wavestream.data.repository.RepoExtension
 import com.wizdier.wavestream.data.repository.RepoRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +16,8 @@ import kotlinx.coroutines.launch
 
 class RepoSettingsViewModel(
     private val repo: RepoRepository,
-    private val installer: ExtensionInstaller
+    private val installer: ExtensionInstaller,
+    private val pluginLoader: PluginLoader
 ) : ViewModel() {
 
     val repos: StateFlow<List<RepoEntity>> =
@@ -33,7 +35,6 @@ class RepoSettingsViewModel(
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
-    // Track which extensions are currently being downloaded.
     private val _installing = MutableStateFlow<Set<String>>(emptySet())
     val installing: StateFlow<Set<String>> = _installing.asStateFlow()
 
@@ -71,14 +72,25 @@ class RepoSettingsViewModel(
     }
 
     /**
-     * Download the extension file (.cs3 or .apk) and trigger Android's
-     * package installer. For .cs3 files we rename to .apk first since
-     * Android's installer rejects unknown extensions.
+     * Install the extension:
+     *  - For `.cs3` files: download to cacheDir/extensions/ and reload the
+     *    plugin registry so the provider appears in WaveStream immediately.
+     *  - For `.apk` files: download + trigger Android's package installer.
      */
     fun install(extension: RepoExtension) {
         viewModelScope.launch {
             _installing.value = _installing.value + extension.apk
-            runCatching { installer.install(extension) }
+            runCatching {
+                installer.install(extension) {
+                    // Reload the plugin registry so the new .cs3 file is picked up.
+                    pluginLoader.reload()
+                }
+            }
+                .onSuccess {
+                    if (extension.apk.endsWith(".cs3", ignoreCase = true)) {
+                        _error.value = "✓ ${extension.name} installed — restart the app to activate it."
+                    }
+                }
                 .onFailure { _error.value = "Install failed: ${it.message ?: "unknown error"}" }
             _installing.value = _installing.value - extension.apk
         }
@@ -104,3 +116,4 @@ class RepoSettingsViewModel(
         }
     }
 }
+

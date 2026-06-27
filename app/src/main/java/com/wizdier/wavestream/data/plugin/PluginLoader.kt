@@ -2,6 +2,7 @@ package com.wizdier.wavestream.data.plugin
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import com.wizdier.wavestream.data.api.Provider
 import com.wizdier.wavestream.data.api.PublicDomainProvider
 import dalvik.system.DexClassLoader
@@ -13,16 +14,19 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 /**
- * Loads [Provider] plugins from two sources:
+ * Loads [Provider] plugins from three sources:
  *  1. Built-in providers shipped inside the app (e.g. [PublicDomainProvider]).
- *  2. Provider extensions installed from user-supplied repository URLs.
+ *  2. Provider APK extensions installed from user-supplied repository URLs
+ *     (classic CloudStream-style .apk extensions with the
+ *     `com.wizdier.wavestream.provider.class` meta-data).
+ *  3. CloudStream 3 `.cs3` plugin files downloaded to `cacheDir/extensions/`
+ *     — these are ZIP archives containing `classes.dex` + `manifest.json`.
+ *     Loaded by [Cs3PluginLoader], which uses a DexClassLoader with
+ *     WaveStream's classloader as parent so the plugin can resolve the
+ *     `com.lagradost.cloudstream3.*` stub classes shipped inside WaveStream.
  *
- * The second case mirrors CloudStream's site-extension system: each extension
- * is a small APK advertising a `wavestream-provider` meta-data entry whose
- * value is the fully-qualified class name implementing [Provider]. We load it
- * with a [DexClassLoader] and instantiate the class reflectively.
- *
- * Plugins are cached on disk under `filesDir/plugins/`.
+ * Plugins are cached on disk under `filesDir/plugins/` (APKs) and
+ * `codeCacheDir/cs3-plugins/` (extracted .dex files).
  */
 class PluginLoader(private val context: Context) {
 
@@ -31,19 +35,18 @@ class PluginLoader(private val context: Context) {
     val providers: StateFlow<List<Provider>> = _providers.asStateFlow()
 
     private val builtin: List<Provider> = listOf(PublicDomainProvider())
+    private val cs3Loader by lazy { Cs3PluginLoader(context) }
 
     /** Warm up the registry on first launch. Idempotent. */
     suspend fun initialize() = mutex.withLock {
         if (_providers.value.isEmpty()) {
-            _providers.value = builtin + loadInstalledExtensions()
+            _providers.value = builtin + loadInstalledExtensions() + loadCs3Plugins()
         }
     }
 
-    /**
-     * Reload the registry — call after installing or uninstalling an extension.
-     */
+    /** Reload the registry — call after installing or uninstalling an extension. */
     suspend fun reload() = mutex.withLock {
-        _providers.value = builtin + loadInstalledExtensions()
+        _providers.value = builtin + loadInstalledExtensions() + loadCs3Plugins()
     }
 
     fun byId(id: String): Provider? = _providers.value.firstOrNull { it.id == id }
@@ -71,6 +74,28 @@ class PluginLoader(private val context: Context) {
                 cls.getDeclaredConstructor().newInstance() as? Provider
             }.getOrNull()
         }
+    }
+
+    /**
+     * Scan `cacheDir/extensions/` for `.cs3` files and load each one.
+     * Failures are logged and skipped so one bad plugin doesn't break the
+     * rest.
+     */
+    private fun loadCs3Plugins(): List<Provider> {
+        val extDir = File(context.cacheDir, "extensions")
+        if (!extDir.exists()) return emptyList()
+        val cs3Files = extDir.listFiles { f -> f.isFile && f.name.endsWith(".cs3", ignoreCase = true) }
+            ?: return emptyList()
+
+        val all = mutableListOf<Provider>()
+        for (file in cs3Files) {
+            runCatching {
+                all += cs3Loader.load(file)
+            }.onFailure {
+                Log.e("PluginLoader", "Failed to load ${file.name}", it)
+            }
+        }
+        return all
     }
 
     companion object {

@@ -50,6 +50,9 @@ val appModule = module {
     single { PluginLoader(androidContext()) }
     single { ExtensionInstaller(androidContext()) }
 
+    // Settings persistence (DataStore-backed)
+    single { com.wizdier.wavestream.data.settings.SettingsRepository(androidContext()) }
+
     // Repositories
     single { ProviderRepository(get()) }
     single { HistoryRepository(get()) }
@@ -77,4 +80,5 @@ val appModule = module {
     viewModelOf(::HistoryViewModel)
     viewModelOf(::PlayerViewModel)
     viewModelOf(::RepoSettingsViewModel)
+    viewModelOf(::com.wizdier.wavestream.ui.settings.SettingsViewModel)
 }

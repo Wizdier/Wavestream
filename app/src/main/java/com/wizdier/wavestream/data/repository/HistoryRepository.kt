@@ -59,6 +59,9 @@ class HistoryRepository(private val dao: HistoryDao) {
         dao.updateProgress(rowId, progressMs, durationMs)
     }
 
+    /** Look up a single history entry by its composite itemId. Used for resume playback. */
+    suspend fun getByItemId(itemId: String): HistoryEntity? = dao.getByItemId(itemId)
+
     suspend fun delete(rowId: Long) = dao.delete(rowId)
 
     suspend fun clear() = dao.clear()
