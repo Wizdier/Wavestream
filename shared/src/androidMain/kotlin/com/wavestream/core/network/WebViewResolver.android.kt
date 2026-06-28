@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import kotlinx.coroutines.delay
@@ -18,14 +17,9 @@ fun initWebViewResolver(context: Context) {
 
 actual class WebViewResolver {
     actual val webViewUserAgent: String? by lazy {
-        val ctx = appContext
-        if (ctx != null) {
-            try {
-                WebSettings.getDefaultUserAgentString(ctx)
-            } catch (e: Throwable) {
-                null
-            }
-        } else {
+        try {
+            System.getProperty("http.agent")
+        } catch (e: Throwable) {
             null
         }
     }

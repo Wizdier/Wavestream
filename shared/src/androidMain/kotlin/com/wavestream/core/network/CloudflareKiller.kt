@@ -2,7 +2,6 @@ package com.wavestream.core.network
 
 import android.content.Context
 import android.webkit.CookieManager
-import android.webkit.WebSettings
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -48,9 +47,10 @@ class CloudflareKiller : Interceptor {
             val ctx = appContext
             if (ctx != null) {
                 webViewUserAgent = try {
-                    WebSettings.getDefaultUserAgentString(ctx)
+                    // Use System.getProperty("http.agent") which returns the WebView user agent on Android
+                    System.getProperty("http.agent") ?: NetworkClient.DEFAULT_USER_AGENT
                 } catch (e: Throwable) {
-                    null
+                    NetworkClient.DEFAULT_USER_AGENT
                 }
             }
         }
