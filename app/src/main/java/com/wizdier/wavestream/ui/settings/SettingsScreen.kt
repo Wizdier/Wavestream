@@ -1,60 +1,40 @@
 package com.wizdier.wavestream.ui.settings
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Brightness6
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PlayCircle
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.Subtitles
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wizdier.wavestream.R
-import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,23 +43,12 @@ fun SettingsScreen(
     onOpenSync: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenFavorites: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProviders: () -> Unit = onOpenRepos,
-    onOpenDownloads: () -> Unit = {},
-    onOpenSearch: () -> Unit = {},
-    viewModel: SettingsViewModel = koinViewModel()
+    onOpenHistory: () -> Unit
 ) {
-    val dynamicColor by viewModel.dynamicColor.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
-    val swipeGestures by viewModel.swipeGestures.collectAsState()
-    val autoPip by viewModel.autoPip.collectAsState()
-    val skipIntro by viewModel.skipIntro.collectAsState()
-    val autoPlayNext by viewModel.autoPlayNext.collectAsState()
-    val preloadNext by viewModel.preloadNext.collectAsState()
-    val subtitleLang by viewModel.subtitleLang.collectAsState()
-    val subtitleSize by viewModel.subtitleSize.collectAsState()
-    val autoDownloadNew by viewModel.autoDownloadNew.collectAsState()
-    val enableNsfw by viewModel.enableNsfw.collectAsState()
+    var dynamicColor by remember { mutableStateOf(true) }
+    var swipeGestures by remember { mutableStateOf(true) }
+    var autoPip by remember { mutableStateOf(true) }
+    var skipIntro by remember { mutableStateOf(true) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }
@@ -90,288 +59,83 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // ─── Extensions & Providers ─────────────────────────────
-            SectionHeader("EXTENSIONS & PROVIDERS", Icons.Outlined.Extension)
-            SettingsRow(
-                icon = Icons.Outlined.Cloud,
-                title = stringResource(R.string.settings_providers),
-                subtitle = "Manage installed provider extensions",
-                onClick = onOpenProviders
+            // General
+            SectionHeader(stringResource(R.string.settings_general))
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.settings_providers)) },
+                supportingContent = { Text(stringResource(R.string.repos_title)) },
+                modifier = Modifier.clickable(onClick = onOpenRepos)
             )
-            SettingsRow(
-                icon = Icons.Outlined.Storage,
-                title = "Installed extensions",
-                subtitle = "View and manage active providers",
-                onClick = onOpenProviders
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Favorite, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.favorites_title)) },
+                modifier = Modifier.clickable(onClick = onOpenFavorites)
             )
-            SettingsRow(
-                icon = Icons.Outlined.Download,
-                title = "Downloads",
-                subtitle = "Manage downloaded videos",
-                onClick = onOpenDownloads
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.History, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.history_title)) },
+                modifier = Modifier.clickable(onClick = onOpenHistory)
             )
-            HorizontalDivider()
 
-            // ─── Library ────────────────────────────────────────────
-            SectionHeader("LIBRARY", Icons.Outlined.Favorite)
-            SettingsRow(
-                icon = Icons.Outlined.Favorite,
-                title = stringResource(R.string.favorites_title),
-                subtitle = "Your watchlists and lists",
-                onClick = onOpenFavorites
+            // Appearance
+            SectionHeader(stringResource(R.string.settings_appearance))
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Brightness6, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.settings_dark_mode)) }
             )
-            SettingsRow(
-                icon = Icons.Outlined.History,
-                title = stringResource(R.string.history_title),
-                subtitle = "Recently watched",
-                onClick = onOpenHistory
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.settings_dynamic_color)) },
+                trailingContent = {
+                    Switch(checked = dynamicColor, onCheckedChange = { dynamicColor = it })
+                }
             )
-            HorizontalDivider()
 
-            // ─── Search ─────────────────────────────────────────────
-            SectionHeader("SEARCH", Icons.Outlined.Search)
-            SettingsRow(
-                icon = Icons.Outlined.Search,
-                title = "Search providers",
-                subtitle = "Select which providers to search",
-                onClick = onOpenSearch
+            // Player
+            SectionHeader(stringResource(R.string.settings_player))
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.PlayCircle, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.settings_player_swipe)) },
+                trailingContent = { Switch(checked = swipeGestures, onCheckedChange = { swipeGestures = it }) }
             )
-            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_player_pip)) },
+                trailingContent = { Switch(checked = autoPip, onCheckedChange = { autoPip = it }) }
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_player_skip_intro)) },
+                trailingContent = { Switch(checked = skipIntro, onCheckedChange = { skipIntro = it }) }
+            )
 
-            // ─── Appearance ─────────────────────────────────────────
-            SectionHeader("APPEARANCE", Icons.Outlined.Palette)
-            var themeDialogOpen by remember { mutableStateOf(false) }
-            SettingsRow(
-                icon = Icons.Outlined.Brightness6,
-                title = stringResource(R.string.settings_dark_mode),
-                subtitle = when (themeMode) {
-                    1 -> "Light"
-                    2 -> "Dark"
-                    else -> "System"
-                },
-                onClick = { themeDialogOpen = true }
+            // Sync
+            SectionHeader(stringResource(R.string.settings_sync))
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Sync, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.sync_trakt) + " / " + stringResource(R.string.sync_mal)) },
+                modifier = Modifier.clickable(onClick = onOpenSync)
             )
-            if (themeDialogOpen) {
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { themeDialogOpen = false },
-                    title = { Text("Theme") },
-                    text = {
-                        Column {
-                            listOf(
-                                0 to "Follow system",
-                                1 to "Light",
-                                2 to "Dark"
-                            ).forEach { (mode, label) ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            viewModel.setThemeMode(mode)
-                                            themeDialogOpen = false
-                                        }
-                                        .padding(vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    androidx.compose.material3.RadioButton(
-                                        selected = themeMode == mode,
-                                        onClick = {
-                                            viewModel.setThemeMode(mode)
-                                            themeDialogOpen = false
-                                        }
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(label)
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        androidx.compose.material3.TextButton(onClick = { themeDialogOpen = false }) {
-                            Text("Close")
-                        }
-                    }
-                )
-            }
-            SettingsRow(
-                icon = Icons.Outlined.Palette,
-                title = stringResource(R.string.settings_dynamic_color),
-                subtitle = "Material You wallpaper-derived colors",
-                trailing = { Switch(checked = dynamicColor, onCheckedChange = { viewModel.setDynamicColor(it) }) }
-            )
-            HorizontalDivider()
 
-            // ─── Player ─────────────────────────────────────────────
-            SectionHeader("PLAYER", Icons.Outlined.PlayCircle)
-            SettingsRow(
-                icon = Icons.Outlined.PlayCircle,
-                title = stringResource(R.string.settings_player_swipe),
-                subtitle = "Brightness · volume · seek",
-                trailing = { Switch(checked = swipeGestures, onCheckedChange = { viewModel.setSwipeGestures(it) }) }
+            // About
+            SectionHeader(stringResource(R.string.settings_about))
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.about_title)) },
+                supportingContent = { Text(stringResource(R.string.app_tagline)) },
+                modifier = Modifier.clickable(onClick = onOpenAbout)
             )
-            SettingsRow(
-                title = stringResource(R.string.settings_player_pip),
-                subtitle = "Auto Picture-in-Picture on home press",
-                trailing = { Switch(checked = autoPip, onCheckedChange = { viewModel.setAutoPip(it) }) }
-            )
-            SettingsRow(
-                title = stringResource(R.string.settings_player_skip_intro),
-                subtitle = "Show skip intro button when detected",
-                trailing = { Switch(checked = skipIntro, onCheckedChange = { viewModel.setSkipIntro(it) }) }
-            )
-            SettingsRow(
-                title = "Auto-play next episode",
-                subtitle = "Continue to the next episode automatically",
-                trailing = { Switch(checked = autoPlayNext, onCheckedChange = { viewModel.setAutoPlayNext(it) }) }
-            )
-            SettingsRow(
-                title = "Preload next episode",
-                subtitle = "Buffer next episode while watching",
-                trailing = { Switch(checked = preloadNext, onCheckedChange = { viewModel.setPreloadNext(it) }) }
-            )
-            HorizontalDivider()
-
-            // ─── Subtitles ──────────────────────────────────────────
-            SectionHeader("SUBTITLES", Icons.Outlined.Subtitles)
-            SettingsRow(
-                icon = Icons.Outlined.Subtitles,
-                title = "Preferred language",
-                subtitle = subtitleLang.uppercase(),
-                onClick = { /* TODO: language picker dialog */ }
-            )
-            var subtitleDialogOpen by remember { mutableStateOf(false) }
-            SettingsRow(
-                title = "Font size",
-                subtitle = "${subtitleSize}sp",
-                onClick = { subtitleDialogOpen = true }
-            )
-            if (subtitleDialogOpen) {
-                var sliderValue by remember { mutableStateOf(subtitleSize.toFloat()) }
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { subtitleDialogOpen = false },
-                    title = { Text("Subtitle font size") },
-                    text = {
-                        Column {
-                            Text("${sliderValue.toInt()}sp", style = MaterialTheme.typography.headlineSmall)
-                            androidx.compose.material3.Slider(
-                                value = sliderValue,
-                                onValueChange = { sliderValue = it },
-                                valueRange = 10f..32f,
-                                steps = 21
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        androidx.compose.material3.TextButton(onClick = {
-                            viewModel.setSubtitleSize(sliderValue.toInt())
-                            subtitleDialogOpen = false
-                        }) { Text("Save") }
-                    },
-                    dismissButton = {
-                        androidx.compose.material3.TextButton(onClick = { subtitleDialogOpen = false }) {
-                            Text("Cancel")
-                        }
-                    }
-                )
-            }
-            HorizontalDivider()
-
-            // ─── Sync ───────────────────────────────────────────────
-            SectionHeader("SYNC", Icons.Outlined.Sync)
-            SettingsRow(
-                icon = Icons.Outlined.Sync,
-                title = stringResource(R.string.sync_trakt) + " / " + stringResource(R.string.sync_mal),
-                subtitle = "Sync watch progress and favorites",
-                onClick = onOpenSync
-            )
-            HorizontalDivider()
-
-            // ─── Advanced ───────────────────────────────────────────
-            SectionHeader("ADVANCED", Icons.Outlined.Settings)
-            SettingsRow(
-                icon = Icons.Outlined.Tune,
-                title = "Default video quality",
-                subtitle = "Auto"
-            )
-            SettingsRow(
-                title = "Auto-download new episodes",
-                subtitle = "Download new episodes as they air",
-                trailing = { Switch(checked = autoDownloadNew, onCheckedChange = { viewModel.setAutoDownloadNew(it) }) }
-            )
-            SettingsRow(
-                title = "NSFW content",
-                subtitle = "Show adult content in search results",
-                trailing = { Switch(checked = enableNsfw, onCheckedChange = { viewModel.setEnableNsfw(it) }) }
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Cloud,
-                title = "Backup",
-                subtitle = "Export favorites, history, and settings",
-                onClick = { /* TODO: trigger backup export via SAF */ }
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Cloud,
-                title = "Restore",
-                subtitle = "Import from a backup file",
-                onClick = { /* TODO: trigger file picker */ }
-            )
-            HorizontalDivider()
-
-            // ─── About ──────────────────────────────────────────────
-            SectionHeader("ABOUT", Icons.Outlined.Info)
-            SettingsRow(
-                icon = Icons.Outlined.Info,
-                title = stringResource(R.string.about_title),
-                subtitle = stringResource(R.string.app_tagline),
-                onClick = onOpenAbout
-            )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
 
 @Composable
-private fun SectionHeader(text: String, icon: ImageVector? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 20.dp, bottom = 8.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-        }
-        Text(text = text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-}
-
-@Composable
-private fun SettingsRow(
-    title: String,
-    subtitle: String? = null,
-    icon: ImageVector? = null,
-    trailing: @Composable (() -> Unit)? = null,
-    onClick: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        if (icon != null) {
-            Box(
-                modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            subtitle?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        trailing?.invoke()
-    }
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+    )
+    HorizontalDivider()
 }

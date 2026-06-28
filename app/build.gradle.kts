@@ -30,13 +30,6 @@ android {
             storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
             keyAlias = System.getenv("KEY_ALIAS") ?: "wavestream"
             keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-            // ⚠️ Critical for Android 7+ — without v2+v3 signatures, Android
-            // rejects the APK with "App not installed as package appears to be invalid."
-            // The default Gradle signing only emits v1 (JAR sig) which doesn't
-            // cover the whole APK. Enable all three schemes explicitly.
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
         }
     }
 
@@ -44,9 +37,6 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
-            // Force the release variant to also be zipAlign'd (Android 7+
-            // requires this for installation; the debug build is auto-aligned
-            // but the release build needs to be explicitly told).
             isZipAlignEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -56,8 +46,6 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            // Debug builds use Android Studio's auto-generated debug keystore,
-            // which signs with v1+v2+v3 by default — no extra config needed.
         }
     }
 
@@ -197,13 +185,7 @@ dependencies {
     // About libraries (used by the Credits screen)
     implementation(libs.about.libraries)
 
-    // CloudStream 3 compatibility shim — these libraries provide symbols
-    // that REAL .cs3 plugin .dex files reference at runtime (via the parent
-    // ClassLoader). Without them, DexClassLoader would throw
-    // NoClassDefFoundError the moment a plugin touches a Jackson mapper or
-    // kotlinx-datetime LocalDate. The actual com.lagradost.cloudstream3.*
-    // surface is provided by our own stub package under
-    // app/src/main/java/com/lagradost/cloudstream3/.
+    // CS3 shim runtime deps
     implementation(libs.jackson.annotations)
     implementation(libs.jackson.databind)
     implementation(libs.jackson.module.kotlin)

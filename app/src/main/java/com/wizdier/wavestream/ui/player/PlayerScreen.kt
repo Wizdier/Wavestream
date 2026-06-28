@@ -57,7 +57,6 @@ fun PlayerScreen(
     val error by viewModel.error.collectAsState()
 
     var skipHint by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    var controlsVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(providerId, url) { viewModel.load(providerId, url) }
 
@@ -134,23 +133,6 @@ fun PlayerScreen(
             val mediaItem = viewModel.buildMediaItem(link, link.name)
             player.setMediaItem(mediaItem)
             player.prepare()
-
-            // ── Resume playback ──────────────────────────────────────────
-            // Look up the last watch position for this title from the history
-            // repository and seek to it before playback starts. CloudStream-
-            // style: skip the resume prompt and just seek silently — the user
-            // can always tap "Restart" in the player controls.
-            val resumeMs = viewModel.getResumePosition(providerId, url)
-            if (resumeMs > 5_000) {
-                // Wait until the player is ready, then seek.
-                kotlinx.coroutines.withTimeoutOrNull(10_000) {
-                    while (player.playbackState != Player.STATE_READY) {
-                        kotlinx.coroutines.delay(100)
-                    }
-                }
-                player.seekTo(resumeMs)
-            }
-
             while (true) {
                 delay(5_000)
                 if (player.duration > 0) {
@@ -169,34 +151,25 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    useController = false  // We use our custom Compose overlay
+                    useController = true
                     this.player = player
                     layoutParams = FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
                     )
+                    // CloudStream-style double-tap skip — the PlayerView controller
+                    // already handles single taps to toggle controls. The controller
+                    // auto-hides after a short idle, no explicit listener needed.
                 }
             }
         )
 
-        // Custom Compose controls overlay — auto-hides after 4s, has
-        // play/pause/skip/seek/speed/subtitle/settings buttons.
-        PlayerControlsOverlay(
-            player = player,
-            title = selected?.name ?: "WaveStream",
-            isVisible = controlsVisible,
-            onToggleVisibility = { controlsVisible = !controlsVisible },
-            onBack = onBack
-        )
-
         // Gesture overlay — Nuvio-style: left/right thirds skip ±10s on double-tap.
-        // Single tap toggles the controls overlay.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(player) {
                     detectTapGestures(
-                        onTap = { controlsVisible = !controlsVisible },
                         onDoubleTap = { offset ->
                             val width = size.width
                             val x = offset.x

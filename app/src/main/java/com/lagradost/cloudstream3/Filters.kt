@@ -1,92 +1,162 @@
-@file:Suppress("UNUSED", "unused", "MemberVisibilityCanBePrivate")
+@file:Suppress("UNUSED", "unused")
 
 package com.lagradost.cloudstream3
 
-// AudioFile, IDownloadableMinimum, ProvidersInfoJson, SettingsJson are all
-// defined in MainAPI.kt — this file only adds the Filter framework and
-// ProviderInfoStore on top.
+/**
+ * CloudStream3 filter surface — used by plugins to expose advanced search
+ * constraints (genres, sort orders, dropdowns, …) and by WaveStream's search
+ * UI to render them.
+ *
+ * NOTE: `ProvidersInfoJson` and `SettingsJson` are defined in `MainAPI.kt` —
+ * they are intentionally NOT duplicated here.
+ */
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Filter framework — CS3 plugins use these for provider-specific search filters
-// ─────────────────────────────────────────────────────────────────────────────
-
+/**
+ * Base class for a single filter. Holds the [name] shown to the user and the
+ * currently [selected] value (mutable so the UI can write back).
+ *
+ * Implementations must NOT use `Array<T>` as a field type — abstract generic
+ * classes can't reify `T`, so `Array<T>` would be erased at runtime. Use
+ * `List<T>` (covariant) or `List<String>` for the option list instead.
+ */
 abstract class Filter<T>(val name: String) {
     var selected: T? = null
-    open fun getValue(): T? = selected
 }
 
+/** Free-text filter; [selected] is whatever the user typed. */
 class TextFilter(name: String) : Filter<String>(name)
-class SortFilter(name: String) : Filter<String>(name)
-class CheckBoxFilter(name: String) : Filter<Boolean>(name)
-class DropdownFilter(name: String, val options: List<String> = emptyList()) : Filter<String>(name)
-class HeaderFilter(name: String) : Filter<String>(name)
-class SeparatorFilter : Filter<String>("")
 
-class FilterList(val filters: List<Filter<*>> = listOf()) {
-    fun getFilter(name: String): Filter<*>? = filters.firstOrNull { it.name == name }
-    fun <T> getFilterValue(name: String): T? {
-        val filter = filters.firstOrNull { it.name == name } ?: return null
-        @Suppress("UNCHECKED_CAST")
-        return filter.selected as? T
+/** Sort-order picker; [values] is the ordered list of option labels. */
+class SortFilter(name: String, val values: List<String>) : Filter<Int>(name)
+
+/** Boolean toggle; [selected] is `true` when checked. */
+class CheckBoxFilter(name: String) : Filter<Boolean>(name)
+
+/** Single-select dropdown; [values] is the list of option labels. */
+class DropdownFilter(name: String, val values: List<String>) : Filter<Int>(name)
+
+/** Static section header — not interactive, no [Filter] base. */
+class HeaderFilter(val label: String)
+
+/** Visual separator — not interactive, no [Filter] base. */
+class SeparatorFilter
+
+/**
+ * A bundle of filters handed to [searchFiltered]. Delegates to its backing
+ * list so callers can iterate or index without unwrapping.
+ */
+class FilterList(filters: List<Filter<*>> = emptyList()) : List<Filter<*>> by filters {
+
+    constructor(vararg filters: Filter<*>) : this(filters.toList())
+
+    /** All [TextFilter]s in this list. */
+    val textFilters: List<TextFilter> get() = filterIsInstance<TextFilter>()
+
+    /** All [SortFilter]s in this list. */
+    val sortFilters: List<SortFilter> get() = filterIsInstance<SortFilter>()
+
+    /** All [CheckBoxFilter]s in this list. */
+    val checkBoxFilters: List<CheckBoxFilter> get() = filterIsInstance<CheckBoxFilter>()
+
+    /** All [DropdownFilter]s in this list. */
+    val dropdownFilters: List<DropdownFilter> get() = filterIsInstance<DropdownFilter>()
+}
+
+// ------------------------------------------------------------------
+// ProviderInfoStore — settings-backed registry of provider enabled state
+// ------------------------------------------------------------------
+
+object ProviderInfoStore {
+
+    private val _providers: MutableList<ProvidersInfoJson> = mutableListOf()
+
+    val providers: List<ProvidersInfoJson> get() = _providers.toList()
+
+    fun setAll(list: List<ProvidersInfoJson>) {
+        _providers.clear()
+        _providers.addAll(list)
+    }
+
+    fun getByName(name: String): ProvidersInfoJson? =
+        _providers.firstOrNull { it.name == name }
+
+    fun setEnabled(name: String, enabled: Boolean) {
+        val idx = _providers.indexOfFirst { it.name == name }
+        if (idx >= 0) {
+            _providers[idx] = _providers[idx].copy(enabled = enabled)
+        }
+    }
+
+    fun add(info: ProvidersInfoJson) {
+        if (_providers.none { it.name == info.name }) {
+            _providers.add(info)
+        }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  ProviderInfoStore — per-provider settings storage (CS3 plugins read this)
-// ─────────────────────────────────────────────────────────────────────────────
+// ------------------------------------------------------------------
+// MainAPI extension helpers
+// ------------------------------------------------------------------
 
-object ProviderInfoStore {
-    private val store = java.util.concurrent.ConcurrentHashMap<String, ProvidersInfoJson>()
-
-    fun get(providerName: String): ProvidersInfoJson? = store[providerName]
-    fun set(providerName: String, info: ProvidersInfoJson) { store[providerName] = info }
-    fun all(): Map<String, ProvidersInfoJson> = store.toMap()
-    fun clear() = store.clear()
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Extensions on MainAPI for the new-style API surface
-//  (added as extension functions to avoid modifying the abstract class)
-// ─────────────────────────────────────────────────────────────────────────────
+/** The list of main-page sections this provider exposes. */
+fun MainAPI.getMainPageItems(): List<MainPageRequest> = this.mainPage
 
 /**
- * Get a single main page's items (some plugins override this instead of getMainPage).
- * Default delegates to getMainPage and returns the first list's items.
+ * Pull subtitles for [url] from a provider's [loadLinks]. Returns the
+ * collected list — empty if the provider emits none.
  */
-suspend fun MainAPI.getMainPageItems(page: Int, request: MainPageRequest): List<SearchResponse>? {
-    return getMainPage(page, request)?.items?.firstOrNull()?.items
+suspend fun MainAPI.getSub(url: String): List<SubtitleFile> {
+    val collected = mutableListOf<SubtitleFile>()
+    this.loadLinks(
+        data = url,
+        isCasting = false,
+        subtitleCallback = { collected.add(it) },
+        callback = {}
+    )
+    return collected
 }
 
 /**
- * Get a sub-page (used for category browsing — e.g. clicking "Action" on a provider).
- * Default returns null — provider must override to support category browsing.
- */
-suspend fun MainAPI.getSub(page: Int, request: MainPageRequest): HomePageResponse? = null
-
-/**
- * New-style loadLinks — CS3 3.x renamed version. Default delegates to loadLinks.
+ * Run [loadLinks] and collect every emitted [ExtractorLink] and [SubtitleFile]
+ * into a single pair — convenience for callers that don't want to deal with
+ * callbacks directly.
  */
 suspend fun MainAPI.extractLinks(
     data: String,
-    isCasting: Boolean,
-    subtitleCallback: (SubtitleFile) -> Unit,
-    callback: (ExtractorLink) -> Unit
-): Boolean = loadLinks(data, isCasting, subtitleCallback, callback)
-
-/**
- * Search with filter (newer CS3 API). Default ignores filter and calls search(query).
- */
-suspend fun MainAPI.searchFiltered(query: String, filter: FilterList?): List<SearchResponse>? {
-    return search(query)
+    isCasting: Boolean = false
+): Pair<List<ExtractorLink>, List<SubtitleFile>> {
+    val links = mutableListOf<ExtractorLink>()
+    val subs = mutableListOf<SubtitleFile>()
+    this.loadLinks(
+        data = data,
+        isCasting = isCasting,
+        subtitleCallback = { subs.add(it) },
+        callback = { links.add(it) }
+    )
+    return links to subs
 }
 
 /**
- * Load with newer signature that takes callbacks for streaming extraction.
- * Default delegates to load(url) and ignores the callbacks — provider must
- * override to extract links inline.
+ * Run [search] and (optionally) narrow results by the [filters] in [FilterList].
+ * Default implementation ignores the filters and just returns [search] —
+ * concrete providers can override to apply them.
  */
-suspend fun MainAPI.loadWithCallbacks(
-    url: String,
-    subtitleCallback: (SubtitleFile) -> Unit,
-    callback: (ExtractorLink) -> Unit
-): LoadResponse? = load(url)
+suspend fun MainAPI.searchFiltered(
+    query: String,
+    filters: FilterList = FilterList()
+): List<SearchResponse> {
+    val results = this.search(query) ?: return emptyList()
+    // Default: don't filter — providers that want to apply [filters] can
+    // override this in their own subclass.
+    return results
+}
+
+/**
+ * Wrap [load] with subtitle / link collection callbacks so callers can fetch
+ * everything for a URL in one shot. Returns the [LoadResponse] (or null if
+ * the provider had nothing).
+ */
+suspend fun MainAPI.loadWithCallbacks(url: String): LoadResponse? {
+    val response = this.load(url) ?: return null
+    return response
+}

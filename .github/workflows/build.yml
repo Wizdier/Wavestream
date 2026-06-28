@@ -8,22 +8,10 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-# Explicit permissions — modern repos default the auto-generated
-# GITHUB_TOKEN to read-only, which breaks the release upload step
-# with "Resource not accessible by integration". This block grants
-# the workflow write access to repo contents (needed to create
-# releases and attach assets) and packages.
-permissions:
-  contents: write
-  packages: write
-
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
 
     steps:
       - name: Checkout
@@ -78,37 +66,8 @@ jobs:
       - name: Decode signing keystore
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
-          echo "=== Decoding keystore from KEYSTORE_BASE64 secret ==="
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $HOME/wavestream.keystore
           echo "KEYSTORE_FILE=$HOME/wavestream.keystore" >> $GITHUB_ENV
-          echo "=== Keystore file info ==="
-          ls -la $HOME/wavestream.keystore
-          file $HOME/wavestream.keystore
-          echo "=== Keystore file type (first bytes) ==="
-          xxd $HOME/wavestream.keystore | head -2
-
-      - name: Verify keystore is readable with provided credentials
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          echo "=== Verifying keystore can be opened with KEYSTORE_PASSWORD ==="
-          if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "❌ ERROR: KEYSTORE_PASSWORD secret is empty or not set!"
-            exit 1
-          fi
-          if [ -z "$KEY_ALIAS" ]; then
-            echo "❌ ERROR: KEY_ALIAS secret is empty or not set!"
-            exit 1
-          fi
-          echo "KEY_ALIAS = $KEY_ALIAS"
-          keytool -list -keystore "$KEYSTORE_FILE" -storepass "$KEYSTORE_PASSWORD" || {
-            echo "❌ ERROR: Could not open keystore with provided password!"
-            echo "This usually means KEYSTORE_PASSWORD is wrong, or KEYSTORE_BASE64 is corrupted."
-            exit 1
-          }
-          echo "✅ Keystore opens successfully."
 
       - name: Build signed release APK
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -116,65 +75,13 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        # Clean first so the v2+v3 signing config takes effect on a fresh build.
-        run: ./gradlew clean :app:assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Locate, verify, and rename release APK
+      - name: Sign APK metadata (sha256)
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
-          echo "=== Files in app/build/outputs/apk/release/ ==="
-          ls -la app/build/outputs/apk/release/ || true
-          echo ""
           cd app/build/outputs/apk/release
-
-          # Find whatever APK Gradle produced.
-          APK_FILE=$(ls *.apk 2>/dev/null | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "❌ ERROR: No APK file found in release output directory!"
-            echo "The build may have failed silently. Check the build logs above."
-            exit 1
-          fi
-          echo "Found APK: $APK_FILE"
-
-          # If Gradle produced an "-unsigned" APK, signing was skipped —
-          # this happens when KEYSTORE_PASSWORD or KEY_PASSWORD env vars
-          # are empty/wrong, even though the keystore itself is valid.
-          if [[ "$APK_FILE" == *unsigned* ]]; then
-            echo "⚠️  WARNING: APK is UNSIGNED!"
-            echo "This means Gradle skipped signing — usually because"
-            echo "KEY_PASSWORD secret is empty or doesn't match."
-            echo ""
-            echo "To fix: go to Settings → Secrets → Actions and verify"
-            echo "KEY_PASSWORD is set to the same value as KEYSTORE_PASSWORD."
-            echo ""
-            echo "For now, we'll still ship the unsigned APK so you can test."
-            mv "$APK_FILE" app-release.apk
-          elif [ "$APK_FILE" != "app-release.apk" ]; then
-            echo "Renaming $APK_FILE → app-release.apk"
-            mv "$APK_FILE" app-release.apk
-          fi
-
-          echo ""
-          echo "=== Verifying APK signature ==="
-          # Use the Android SDK build-tools apksigner if available.
-          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
-          if [ -n "$APKSIGNER" ]; then
-            "$APKSIGNER" verify --verbose app-release.apk || echo "⚠️  APK signature verification failed (or APK is unsigned)"
-          else
-            # Fallback: check the APK's META-INF for a signature file.
-            if unzip -l app-release.apk | grep -qE "META-INF/.*\.(RSA|EC|DSA)"; then
-              echo "✅ APK contains a signature file."
-            else
-              echo "⚠️  APK does NOT appear to be signed!"
-            fi
-          fi
-
-          echo ""
-          echo "=== Computing SHA-256 ==="
           sha256sum app-release.apk > app-release.apk.sha256
-          cat app-release.apk.sha256
-          echo ""
-          echo "=== Final files ==="
           ls -la
 
       - name: Upload release APK artifact

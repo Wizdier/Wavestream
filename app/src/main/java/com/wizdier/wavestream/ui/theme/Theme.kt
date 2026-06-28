@@ -16,6 +16,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+/**
+ * WaveStream's Material You theme. Nuvio influence: on Android 12+ we apply
+ * the user's wallpaper-derived dynamic colour scheme; on older devices we
+ * fall back to WaveStream's signature deep-blue palette. The status bar is
+ * made transparent so blur backdrops can bleed under it.
+ */
 private val DarkColors = darkColorScheme(
     primary = WavePrimary,
     onPrimary = WaveOnPrimary,
@@ -37,34 +43,21 @@ private val LightColors = lightColorScheme(
     primaryContainer = Color(0xFFDDE1FF),
     secondary = WaveSecondary,
     tertiary = WaveTertiary,
-    background = Color(0xFFF7F9FC),
-    onBackground = Color(0xFF0A0E1A),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF0A0E1A),
-    surfaceVariant = Color(0xFFE2E8F0),
+    background = WaveBackgroundLight,
+    onBackground = WaveOnBackgroundLight,
+    surface = WaveSurfaceLight,
+    onSurface = WaveOnSurfaceLight,
+    surfaceVariant = WaveSurfaceVariantLight,
     error = Color(0xFFB00020),
-    outline = Color(0xFFB0B7C3)
+    outline = WaveOutlineLight
 )
 
-/**
- * WaveStream's Material You theme.
- *
- * @param themeMode 0 = follow system, 1 = light, 2 = dark
- * @param dynamicColor enable wallpaper-derived colors on Android 12+
- */
 @Composable
 fun WaveStreamTheme(
-    themeMode: Int = 0,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val systemDark = isSystemInDarkTheme()
-    val darkTheme = when (themeMode) {
-        1 -> false
-        2 -> true
-        else -> systemDark
-    }
-
     val context = LocalContext.current
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->

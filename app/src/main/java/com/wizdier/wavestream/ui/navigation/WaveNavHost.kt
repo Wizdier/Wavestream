@@ -1,30 +1,29 @@
 package com.wizdier.wavestream.ui.navigation
 
 import android.content.Intent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.wizdier.wavestream.R
-import com.wizdier.wavestream.ui.components.AnimatedBottomNav
-import com.wizdier.wavestream.ui.components.NavItem
 import com.wizdier.wavestream.ui.detail.DetailScreen
 import com.wizdier.wavestream.ui.downloads.DownloadsScreen
 import com.wizdier.wavestream.ui.favorites.FavoritesScreen
@@ -55,68 +54,50 @@ sealed class WaveRoute(val route: String) {
     data object About : WaveRoute("settings/about")
 }
 
+private data class BottomItem(val route: WaveRoute, val label: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
 @Composable
 fun WaveNavHost() {
     val navController = rememberNavController()
     val backstack by navController.currentBackStackEntryAsState()
     val current = backstack?.destination
 
-    val navItems = listOf(
-        NavItem(WaveRoute.Home.route, "Home", Icons.Outlined.Home),
-        NavItem(WaveRoute.Search.route, "Search", Icons.Outlined.Search),
-        NavItem(WaveRoute.Downloads.route, "Downloads", Icons.Outlined.CloudDownload),
-        NavItem(WaveRoute.Settings.route, "Settings", Icons.Outlined.Settings)
+    val bottomItems = listOf(
+        BottomItem(WaveRoute.Home, R.string.nav_home, Icons.Outlined.Home),
+        BottomItem(WaveRoute.Search, R.string.nav_search, Icons.Outlined.Search),
+        BottomItem(WaveRoute.Downloads, R.string.nav_downloads, Icons.Outlined.CloudDownload),
+        BottomItem(WaveRoute.Settings, R.string.nav_settings, Icons.Outlined.Settings)
     )
 
-    val showBottomBar = current?.route in navItems.map { it.route }
+    val showBottomBar = current?.route in bottomItems.map { it.route.route }
 
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                AnimatedBottomNav(
-                    items = navItems,
-                    currentRoute = current?.route,
-                    onItemClick = { item ->
-                        navController.navigate(item.route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                NavigationBar {
+                    bottomItems.forEach { item ->
+                        val selected = current?.hierarchy?.any { it.route == item.route.route } == true
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(item.route.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(item.icon, contentDescription = null) },
+                            label = { Text(stringResource(item.label)) }
+                        )
                     }
-                )
+                }
             }
         }
     ) { padding ->
         NavHost(
             navController = navController,
             startDestination = WaveRoute.Home.route,
-            modifier = Modifier.padding(padding),
-            // Screen transition animations — slide in from the right for
-            // forward navigation, slide out to the left for back.
-            enterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { it / 3 },
-                    animationSpec = tween(300)
-                ) + fadeIn(tween(300))
-            },
-            exitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { -it / 3 },
-                    animationSpec = tween(200)
-                ) + fadeOut(tween(200))
-            },
-            popEnterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { -it / 3 },
-                    animationSpec = tween(300)
-                ) + fadeIn(tween(300))
-            },
-            popExitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { it / 3 },
-                    animationSpec = tween(200)
-                ) + fadeOut(tween(200))
-            }
+            modifier = Modifier.padding(padding)
         ) {
             composable(WaveRoute.Home.route) {
                 HomeScreen(

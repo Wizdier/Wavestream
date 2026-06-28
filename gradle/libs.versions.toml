@@ -26,12 +26,6 @@ coroutines = "1.9.0"
 splashscreen = "1.0.1"
 datastore = "1.1.1"
 webkit = "1.12.1"
-# CloudStream 3 compatibility shim — these libs are needed at runtime
-# by .cs3 plugin .dex files (they reference symbols from these packages).
-ktor = "2.3.12"
-jackson = "2.17.2"
-kotlinxDatetime = "0.6.1"
-kotlinxAtomicfu = "0.25.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -81,8 +75,6 @@ about-libraries = { group = "com.mikepenz", name = "aboutlibraries-compose", ver
 play-services-cast = { group = "com.google.android.gms", name = "play-services-cast", version.ref = "playServicesCast" }
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCastFramework" }
 androidx-browser = { group = "androidx.browser", name = "browser", version = "1.8.0" }
-
-# CloudStream 3 shim — Jackson + kotlinx-datetime are referenced by CS3 plugins
 jackson-annotations = { group = "com.fasterxml.jackson.core", name = "jackson-annotations", version = "2.17.2" }
 jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version = "2.17.2" }
 jackson-module-kotlin = { group = "com.fasterxml.jackson.module", name = "jackson-module-kotlin", version = "2.17.2" }
