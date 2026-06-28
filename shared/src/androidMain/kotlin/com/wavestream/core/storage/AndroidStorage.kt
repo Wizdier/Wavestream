@@ -3,15 +3,10 @@ package com.wavestream.core.storage
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import androidx.preference.PreferenceManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.serializer
 
-/**
- * Android-specific implementation of PlatformStorage, backed by SharedPreferences.
- */
 class AndroidStorage private constructor(
     private val context: Context,
     private val prefs: SharedPreferences,
@@ -26,7 +21,7 @@ class AndroidStorage private constructor(
             return instance ?: synchronized(this) {
                 instance ?: AndroidStorage(
                     context.applicationContext,
-                    PreferenceManager.getDefaultSharedPreferences(context.applicationContext),
+                    context.applicationContext.getSharedPreferences("wavestream_prefs", Context.MODE_PRIVATE),
                     json,
                 ).also { instance = it }
             }
@@ -62,9 +57,7 @@ class AndroidStorage private constructor(
                 val ser = kotlinx.serialization.serializer(klass as java.lang.reflect.Type) as kotlinx.serialization.KSerializer<T>
                 json.decodeFromString(ser, raw)
             }
-        } catch (e: Exception) {
-            default
-        }
+        } catch (e: Exception) { default }
     }
 
     override fun <T : Any> get(folder: String, key: String, klass: Class<T>, default: T?): T? {

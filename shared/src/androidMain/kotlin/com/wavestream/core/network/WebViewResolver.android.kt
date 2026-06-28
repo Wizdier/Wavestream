@@ -3,7 +3,6 @@ package com.wavestream.core.network
 import android.annotation.SuppressLint
 import android.content.Context
 import android.webkit.CookieManager
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -16,15 +15,11 @@ fun initWebViewResolver(context: Context) {
     appContext = context.applicationContext
 }
 
-/**
- * Android implementation of WebViewResolver — uses WebView to solve Cloudflare challenges.
- *
- * Mirrors CloudStream's `WebViewResolver.android.kt`.
- */
 actual class WebViewResolver {
     actual val webViewUserAgent: String? by lazy {
         runCatching {
-            android.webkit.WebSettings.getDefaultUserAgentString(appContext)
+            val ctx = appContext ?: return@lazy null
+            android.webkit.WebSettings.getDefaultUserAgentString(ctx)
         }.getOrNull()
     }
 
@@ -43,10 +38,8 @@ actual class WebViewResolver {
                     if (callback()) resolved = true
                 }
             }
-            webView.webChromeClient = WebChromeClient()
             webView.loadUrl(url)
 
-            // Poll for cookies
             while (!resolved) {
                 delay(500)
                 val cookies = CookieManager.getInstance().getCookie(url)

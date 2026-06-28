@@ -80,6 +80,9 @@ kotlin {
                 implementation(libs.androidx.biometric)
                 implementation(libs.material)
 
+                // Preference (for SharedPreferences)
+                implementation("androidx.preference:preference-ktx:1.2.1")
+
                 // Media3 / ExoPlayer
                 implementation(libs.androidx.media3.exoplayer)
                 implementation(libs.androidx.media3.exoplayer.hls)

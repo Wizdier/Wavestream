@@ -23,11 +23,6 @@ jobs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      with:
-        packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
-
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
@@ -42,7 +37,3 @@ jobs:
         name: wavestream-debug-apk
         path: app/build/outputs/apk/stable/debug/*.apk
         retention-days: 30
-
-    - name: Build desktop JAR (optional)
-      run: ./gradlew :shared:compileKotlinDesktop --no-daemon
-      continue-on-error: true
