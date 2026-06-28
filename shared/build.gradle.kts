@@ -39,10 +39,6 @@ kotlin {
                 implementation(libs.coil.compose)
                 implementation(libs.coil.network.ktor)
                 implementation(libs.coil.svg)
-                implementation(libs.coil.gif)
-
-                // Haze (blur effects)
-                implementation(libs.haze)
 
                 // Ktor
                 implementation(libs.ktor.client.core)
@@ -52,11 +48,6 @@ kotlin {
                 // KotlinX
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.serialization.json)
-                implementation(libs.kotlinx.datetime)
-                implementation(libs.kotlinx.atomicfu)
-
-                // HTML parsing
-                implementation(libs.ksoup)
 
                 // JavaScript engine (Rhino — pure JVM, works on Android + Desktop)
                 implementation(libs.rhino)
@@ -65,9 +56,6 @@ kotlin {
                 implementation(libs.androidx.lifecycle.viewmodel.compose)
                 implementation(libs.androidx.lifecycle.runtime.compose)
                 implementation(libs.androidx.navigation.compose)
-
-                // Logging
-                implementation(libs.kermit)
             }
         }
 

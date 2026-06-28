@@ -14,12 +14,7 @@ coil = "3.0.4"
 ktor = "3.0.3"
 kotlinx-coroutines = "1.9.0"
 kotlinx-serialization = "1.7.3"
-kotlinx-datetime = "0.6.1"
-kotlinx-atomicfu = "0.27.0"
-ksoup = "0.2.6"
 rhino = "1.7.15"
-kermit = "2.0.5"
-haze = "1.1.1"
 material = "1.12.0"
 junit = "4.13.2"
 
@@ -47,7 +42,6 @@ compose-components-resources = { group = "org.jetbrains.compose.components", nam
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-ktor = { group = "io.coil-kt.coil3", name = "coil-network-ktor3", version.ref = "coil" }
 coil-svg = { group = "io.coil-kt.coil3", name = "coil-svg", version.ref = "coil" }
-coil-gif = { group = "io.coil-kt.coil3", name = "coil-gif", version.ref = "coil" }
 
 # Ktor (HTTP client)
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
@@ -62,17 +56,9 @@ kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
-kotlinx-atomicfu = { group = "org.jetbrains.kotlinx", name = "atomicfu", version.ref = "kotlinx-atomicfu" }
-
-# HTML parsing
-ksoup = { group = "com.fleeksoft.ksoup", name = "ksoup", version.ref = "ksoup" }
 
 # JavaScript engine (for JS plugin runtime)
 rhino = { group = "org.mozilla", name = "rhino", version.ref = "rhino" }
-
-# Logging
-kermit = { group = "co.touchlab", name = "kermit", version.ref = "kermit" }
 
 # Media3 / ExoPlayer (Android only)
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "androidx-media3" }
@@ -81,9 +67,6 @@ androidx-media3-exoplayer-dash = { group = "androidx.media3", name = "media3-exo
 androidx-media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "androidx-media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "androidx-media3" }
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "androidx-media3" }
-
-# Haze (glass/blur effects)
-haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
 
 # Material Components (for Android XML fallbacks)
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }

@@ -95,7 +95,7 @@ class AndroidStorage private constructor(
     override fun keysFlow(prefix: String): Flow<List<String>> {
         val flow = MutableStateFlow(prefs.all.keys.filter { it.startsWith(prefix) })
         prefs.registerOnSharedPreferenceChangeListener { _, changedKey ->
-            if (changedKey.startsWith(prefix)) {
+            if (changedKey != null && changedKey.startsWith(prefix)) {
                 flow.value = prefs.all.keys.filter { it.startsWith(prefix) }
             }
         }

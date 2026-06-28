@@ -18,10 +18,16 @@ fun initWebViewResolver(context: Context) {
 
 actual class WebViewResolver {
     actual val webViewUserAgent: String? by lazy {
-        runCatching {
-            val ctx = appContext ?: return@lazy null
-            WebSettings.getDefaultUserAgentString(ctx)
-        }.getOrNull()
+        val ctx = appContext
+        if (ctx != null) {
+            try {
+                WebSettings.getDefaultUserAgentString(ctx)
+            } catch (e: Throwable) {
+                null
+            }
+        } else {
+            null
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -43,7 +49,7 @@ actual class WebViewResolver {
 
             while (!resolved) {
                 delay(500)
-                val cookies = CookieManager.getInstance().getCookie(url)
+                val cookies = try { CookieManager.getInstance().getCookie(url) } catch (e: Throwable) { null }
                 if (cookies?.contains("cf_clearance") == true) {
                     if (callback()) resolved = true
                 }

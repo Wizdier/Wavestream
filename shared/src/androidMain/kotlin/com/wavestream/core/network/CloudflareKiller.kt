@@ -11,7 +11,6 @@ import io.ktor.client.plugins.cookies.*
 import io.ktor.serialization.kotlinx.json.*
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.Response
 import java.util.concurrent.TimeUnit
 
@@ -46,10 +45,14 @@ class CloudflareKiller : Interceptor {
 
     fun getWebViewUserAgent(): String? {
         if (webViewUserAgent == null) {
-            webViewUserAgent = runCatching {
-                val ctx = appContext ?: return null
-                WebSettings.getDefaultUserAgentString(ctx)
-            }.getOrNull()
+            val ctx = appContext
+            if (ctx != null) {
+                webViewUserAgent = try {
+                    WebSettings.getDefaultUserAgentString(ctx)
+                } catch (e: Throwable) {
+                    null
+                }
+            }
         }
         return webViewUserAgent
     }
@@ -64,7 +67,6 @@ class CloudflareKiller : Interceptor {
             val server = response.header("Server")
             if (server in CLOUDFLARE_SERVERS && response.code in ERROR_CODES) {
                 response.close()
-                // Try to solve Cloudflare
                 val solved = solveCloudflare(request.url.toString())
                 if (solved) {
                     val newCookies = savedCookies[host]
@@ -92,14 +94,12 @@ class CloudflareKiller : Interceptor {
     }
 
     private fun solveCloudflare(url: String): Boolean {
-        val cookieString = runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()
+        val cookieString = try { CookieManager.getInstance().getCookie(url) } catch (e: Throwable) { null }
         if (cookieString != null && cookieString.contains("cf_clearance")) {
             val host = try { java.net.URI(url).host } catch (e: Exception) { return false }
             savedCookies[host] = parseCookieMap(cookieString)
             return true
         }
-        // In a full implementation, this would spawn a WebView to solve the challenge.
-        // For now, just check existing cookies.
         return false
     }
 }
