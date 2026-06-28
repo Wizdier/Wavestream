@@ -1,110 +1,48 @@
-name: Build & Release
+name: Build APK
 
 on:
   push:
     branches: [ main, master ]
-    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: "8.9"
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-${{ runner.os }}-
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
 
-      - name: Bootstrap Gradle wrapper (if missing)
-        run: |
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            gradle wrapper --gradle-version 8.9
-          fi
-          chmod +x ./gradlew
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
 
-      - name: Build debug APK (push / PR)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+    - name: Build debug APK
+      run: ./gradlew :app:assembleStableDebug --no-daemon --stacktrace
 
-      - name: Upload debug APK artifact
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: wavestream-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: wavestream-debug-apk
+        path: app/build/outputs/apk/stable/debug/*.apk
+        retention-days: 30
 
-      # ──────────────────────────────────────────────────────────────
-      # Release builds: only on tag push (v*). Decodes the keystore
-      # from the KEYSTORE_BASE64 secret, signs the APK, and publishes
-      # a GitHub Release with the APK attached.
-      # ──────────────────────────────────────────────────────────────
-
-      - name: Decode signing keystore
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $HOME/wavestream.keystore
-          echo "KEYSTORE_FILE=$HOME/wavestream.keystore" >> $GITHUB_ENV
-
-      - name: Build signed release APK
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
-
-      - name: Sign APK metadata (sha256)
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        run: |
-          cd app/build/outputs/apk/release
-          sha256sum app-release.apk > app-release.apk.sha256
-          ls -la
-
-      - name: Upload release APK artifact
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: wavestream-release-apk
-          path: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/apk/release/app-release.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Create GitHub Release
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          name: WaveStream ${{ github.ref_name }}
-          body_path: CHANGELOG.md
-          files: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/apk/release/app-release.apk.sha256
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build desktop JAR (optional)
+      run: ./gradlew :shared:compileKotlinDesktop --no-daemon
+      continue-on-error: true

@@ -1,51 +1,76 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File as JFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.about.libs)
+    alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
-    namespace = "com.wizdier.wavestream"
-    compileSdk = 34
+    namespace = "com.wavestream.app"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.wizdier.wavestream"
-        minSdk = 26
-        targetSdk = 34
-        versionCode = 3
-        versionName = "0.0.2"
+        applicationId = "com.wavestream.app"
+        minSdk = 21
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables { useSupportLibrary = true }
+
+        // Build config fields for API keys (set via local.properties or env vars)
+        buildConfigField("long", "BUILD_DATE", "${System.currentTimeMillis()}L")
     }
 
     signingConfigs {
-        create("release") {
-            // Credentials come from environment variables (CI) or local.properties.
-            // For local builds, set the env vars or hardcode the keystore path here.
-            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "../wavestream.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("KEY_ALIAS") ?: "wavestream"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+        create("prerelease") {
+            val keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+            val storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+            val keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            if (keyAlias != null && storePassword != null && keyPassword != null) {
+                val tmpFilePath = System.getProperty("user.home") + "/work/_temp/keystore/"
+                val prereleaseStoreFile: JFile? = JFile(tmpFilePath).listFiles()?.first()
+                storeFile = prereleaseStoreFile?.let { file(it) }
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
-            isZipAlignEnabled = true
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Use debug signing for CI builds (no keystore needed)
+            // For production releases, set up signing via GitHub Secrets
         }
         debug {
+            isDebuggable = true
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
+        }
+    }
+
+    flavorDimensions += "state"
+    productFlavors {
+        create("stable") {
+            dimension = "state"
+        }
+        create("prerelease") {
+            dimension = "state"
+            applicationIdSuffix = ".prerelease"
+            versionNameSuffix = "-PRE"
+            if (signingConfigs.names.contains("prerelease")) {
+                signingConfig = signingConfigs.getByName("prerelease")
+            }
         }
     }
 
@@ -54,140 +79,27 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs = listOf(
-            "-opt-in=kotlin.RequiresOptIn",
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
-            "-opt-in=androidx.compose.material.ExperimentalMaterialApi",
-            "-opt-in=androidx.compose.animation.ExperimentalAnimationApi",
-            "-opt-in=androidx.media3.common.util.UnstableApi",
-            "-opt-in=androidx.compose.ExperimentalComposeApi"
-        )
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
     }
-
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            excludes += "/META-INF/DEPENDENCIES"
-            excludes += "META-INF/INDEX.LIST"
-        }
-    }
-
-    // Lint — relax the release build so minor issues don't block publishing.
-    // `lintVitalRelease` runs automatically on `assembleRelease` and aborts
-    // the build on any fatal error. We disable that abort so a missing
-    // translation or backup-rule nit doesn't block the APK from shipping.
-    // Real issues still surface in the debug build's lint task.
-    lint {
-        abortOnError = false
-        checkReleaseBuilds = false
-    }
-
-    aboutLibraries {
-        // Use the plugin's default config path. If you want to ship custom
-        // license mappings, drop them under app/src/main/assets/aboutlibraries/
-        // and uncomment the line below.
-        // configPath = "app/src/main/assets/aboutlibraries"
-    }
 }
 
-// Force-align the play-services-cast family so that transitive pulls
-// (e.g. androidx.mediarouter pulling in an older cast-framework) can't
-// desync from the version we explicitly declared. Without this the build
-// fails with "Duplicate class com.google.android.gms.internal.cast.zzed"
-// during :app:checkDebugDuplicateClasses.
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "com.google.android.gms") {
-            when (requested.name) {
-                "play-services-cast",
-                "play-services-cast-framework" -> useVersion("21.3.0")
-            }
-        }
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
 dependencies {
-    // Core
+    implementation(project(":shared"))
+
+    // Android-specific dependencies
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.core.splashscreen)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.webkit)
-    implementation(libs.androidx.browser)
+    implementation(libs.material)
 
-    // Compose
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.androidx.compose.animation)
-    implementation(libs.androidx.navigation.compose)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-
-    // Media3 / ExoPlayer
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.ui)
-    implementation(libs.androidx.media3.common)
-    implementation(libs.androidx.media3.extractor)
-    implementation(libs.androidx.media3.datasource.okhttp)
-    implementation(libs.androidx.media3.session)
-
-    // Room
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
-
-    // WorkManager
-    implementation(libs.androidx.work.runtime.ktx)
-
-    // Cast — use the framework artifact; it transitively pulls in
-    // play-services-cast at a matching version, avoiding the
-    // "Duplicate class com.google.android.gms.internal.cast.zzed" conflict
-    // that arises when cast and cast-framework versions diverge.
-    implementation(libs.androidx.mediarouter)
-    implementation(libs.play.services.cast.framework)
-
-    // Koin
-    implementation(libs.koin.core)
-    implementation(libs.koin.android)
-    implementation(libs.koin.androidx.workmanager)
-    implementation(libs.koin.androidx.compose)
-
-    // Networking
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.scalars)
-    implementation(libs.retrofit.kotlinx.serialization)
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
-    implementation(libs.jsoup)
-
-    // Image loading
-    implementation(libs.coil.compose)
-
-    // Coroutines
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.serialization.json)
-
-    // About libraries (used by the Credits screen)
-    implementation(libs.about.libraries)
-
-    // CS3 shim runtime deps
-    implementation(libs.jackson.annotations)
-    implementation(libs.jackson.databind)
-    implementation(libs.jackson.module.kotlin)
-    implementation(libs.kotlinx.datetime)
+    // Splash screen
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }

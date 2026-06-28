@@ -1,0 +1,7 @@
+{
+  "name": "ExampleProvider",
+  "pluginClassName": "com.wavestream.examples.ExamplePlugin",
+  "version": 1,
+  "requiresResources": false,
+  "apiVersion": 1
+}

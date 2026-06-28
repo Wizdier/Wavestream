@@ -18,8 +18,10 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven("https://jitpack.io")
+        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
 }
 
-rootProject.name = "WaveStream"
+rootProject.name = "Wavestream"
+include(":shared")
 include(":app")

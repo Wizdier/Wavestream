@@ -1,29 +1,21 @@
-                    GNU GENERAL PUBLIC LICENSE
-                       Version 3, 29 June 2007
+MIT License
 
- Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
- Everyone is permitted to copy and distribute verbatim copies
- of this license document, but changing it is not allowed.
+Copyright (c) 2026 Wavestream
 
-WaveStream is licensed under the GNU General Public License v3.0,
-inheriting the license of its upstream projects CloudStream and Nuvio.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-The full text of the license is available at:
-https://www.gnu.org/licenses/gpl-3.0.txt
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-For the complete license text, see:
-https://www.gnu.org/licenses/gpl-3.0.html
-
----
-
-A short summary of GPL-3.0 (not a substitute for the full text):
-
-  * You may use, study, modify and redistribute this software.
-  * If you redistribute the software (or a modified version), you must
-    do so under the same GPL-3.0 license, including making the source
-    code available to recipients.
-  * Any derivative work that links to or incorporates this software
-    must also be released under GPL-3.0.
-  * The software is provided "as is", without warranty of any kind.
-
-For attribution and credits, see the README.md "Credits" section.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

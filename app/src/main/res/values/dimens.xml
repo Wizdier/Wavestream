@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <dimen name="card_corner">12dp</dimen>
-    <dimen name="poster_width">110dp</dimen>
-    <dimen name="poster_height">160dp</dimen>
-    <dimen name="backdrop_height">220dp</dimen>
-    <dimen name="content_padding">16dp</dimen>
-    <dimen name="card_spacing">12dp</dimen>
-</resources>

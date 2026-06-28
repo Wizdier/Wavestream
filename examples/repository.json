@@ -1,0 +1,8 @@
+{
+  "name": "Wavestream Example Repository",
+  "description": "Official example repository for Wavestream plugins",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/wavestream/example-repo/main/plugins.json"
+  ]
+}

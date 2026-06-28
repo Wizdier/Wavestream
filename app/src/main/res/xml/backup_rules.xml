@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<full-backup-content>
-    <include domain="database" path="wavestream.db" />
-    <include domain="sharedpref" path="wavestream_prefs.xml" />
-    <exclude domain="sharedpref" path="wavestream_prefs/device.xml" />
-</full-backup-content>

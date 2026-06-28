@@ -1,11 +1,16 @@
-# Add project specific ProGuard rules here.
+# Wavestream ProGuard rules
 
-# Keep WaveStream plugin/provider classes (loaded reflectively)
--keep class com.wizdier.wavestream.data.api.** { *; }
--keep class * implements com.wizdier.wavestream.data.api.Provider { *; }
--keep class * implements com.wizdier.wavestream.data.api.MainAPI { *; }
+# Keep CloudStream-style plugin contract classes
+-keep class com.wavestream.api.** { *; }
+-keep class com.wavestream.plugins.BasePlugin { *; }
+-keep class com.wavestream.plugins.BasePlugin$Manifest { *; }
+-keep @com.wavestream.plugins.WavestreamPlugin class *
 
-# Kotlinx Serialization
+# Keep Rhino classes (for JS plugin runtime)
+-keep class org.mozilla.javascript.** { *; }
+-dontwarn org.mozilla.javascript.**
+
+# Keep kotlinx.serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
 -keepclassmembers class kotlinx.serialization.json.** {
@@ -15,31 +20,14 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Retrofit
--keepattributes Signature, InnerClasses, EnclosingMethod
--keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
--keepclassmembers,allowshrinking,allowobfuscation interface * {
-    @retrofit2.http.* <methods>;
-}
--dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement
+# Keep Compose
+-keep class androidx.compose.** { *; }
+-dontwarn androidx.compose.**
 
-# OkHttp
--dontwarn okhttp3.**
--dontwarn okio.**
+# Keep Ktor
+-keep class io.ktor.** { *; }
+-dontwarn io.ktor.**
 
-# Jsoup
--dontwarn org.jsoup.**
-
-# Room
--keep class * extends androidx.room.RoomDatabase
--keep @androidx.room.Entity class *
--dontwarn androidx.room.paging.**
-
-# Koin
--keep class org.koin.** { *; }
-
-# Media3
--dontwarn androidx.media3.**
-
-# Coil
--dontwarn coil.**
+# Keep Coil
+-keep class coil3.** { *; }
+-dontwarn coil3.**
