@@ -21,6 +21,7 @@ kotlin {
                 optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
                 optIn("androidx.compose.material3.ExperimentalMaterial3Api")
                 optIn("androidx.compose.foundation.ExperimentalFoundationApi")
+                optIn("kotlinx.serialization.ExperimentalSerializationApi")
             }
         }
 
@@ -67,6 +68,9 @@ kotlin {
                 implementation(libs.androidx.work.runtime)
                 implementation(libs.androidx.biometric)
                 implementation(libs.material)
+
+                // Fragment (for BiometricAuthenticator — FragmentActivity)
+                implementation("androidx.fragment:fragment-ktx:1.6.2")
 
                 // Preference (for SharedPreferences)
                 implementation("androidx.preference:preference-ktx:1.2.1")
