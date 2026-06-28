@@ -29,3 +29,7 @@ val WaveOutlineLight = Color(0xFFB0B7C3)
 val ScrimTop = Color(0x66000000)
 val ScrimBottom = Color(0xCC000000)
 val GestureHint = Color(0xCCFFFFFF)
+
+// Shimmer loading placeholders
+val ShimmerBase = Color(0xFF1A1D26)
+val ShimmerHighlight = Color(0xFF2D3654)

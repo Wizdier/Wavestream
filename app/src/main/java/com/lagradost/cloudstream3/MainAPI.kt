@@ -45,7 +45,7 @@ sealed class LoadResponse { abstract val name: String; abstract val url: String;
 
 @Serializable data class ExtractorLink(val source: String, val name: String, val url: String, val referer: String, val quality: Int, val headers: Map<String, String> = mapOf(), val extractorType: ExtractorType = ExtractorType.DIRECT, val duration: Long? = null) { companion object { const val QUALITY_UNKNOWN = -1; const val QUALITY_360 = 360; const val QUALITY_480 = 480; const val QUALITY_720 = 720; const val QUALITY_1080 = 1080; const val QUALITY_2160 = 2160 } }
 
-@Serializable data class ProvidersInfoJson(var name: String = "", var url: String = "", var credentials: String? = null)
+@Serializable data class ProvidersInfoJson(var name: String = "", var url: String = "", var credentials: String? = null, var enabled: Boolean = true)
 @Serializable data class SettingsJson(var enableForAutodownload: Boolean = false)
 
 abstract class MainAPI {
@@ -63,7 +63,7 @@ abstract class MainAPI {
     fun newTvSeriesSearchResponse(name: String, url: String, fix: Boolean = true, i: TvSeriesSearchResponse.() -> Unit = {}) = TvSeriesSearchResponse(name, if (fix) fixUrl(url) else url, this.name).apply(i)
     fun newAnimeSearchResponse(name: String, url: String, fix: Boolean = true, i: AnimeSearchResponse.() -> Unit = {}) = AnimeSearchResponse(name, if (fix) fixUrl(url) else url, this.name).apply(i)
     fun newMovieLoadResponse(name: String, url: String, type: TvType, data: String, fix: Boolean = true, i: MovieLoadResponse.() -> Unit = {}) = MovieLoadResponse(name, if (fix) fixUrl(url) else url, this.name, type, if (fix) fixUrl(data) else data).apply(i)
-    fun newTvSeriesLoadResponse(name: String, url: String, type: TvType, episodes: List<Episode>, fix: Boolean = true, i: TvSeriesLoadResponse.() -> Unit = {}) = TvSeriesLoadResponse(name, if (fix) fixUrl(url) else url, this.name, type, episodes).apply(i)
+    fun newTvSeriesLoadResponse(name: String, url: String, type: TvType, episodes: List<Episode>, fix: Boolean = true, i: TvSeriesLoadResponse.() -> Unit = {}) = TvSeriesLoadResponse(name = name, url = if (fix) fixUrl(url) else url, apiName = this.name, type = type, episodes = episodes).apply(i)
     fun newAnimeLoadResponse(name: String, url: String, type: TvType, fix: Boolean = true, i: AnimeLoadResponse.() -> Unit = {}) = AnimeLoadResponse(name, if (fix) fixUrl(url) else url, this.name, type).apply(i)
     fun newHomePageResponse(name: String, items: List<SearchResponse>, hasNext: Boolean = false) = HomePageResponse(listOf(HomePageList(name, items)), hasNext)
     fun newEpisode(episode: Int? = null) = Episode(episode = episode, apiName = this.name)

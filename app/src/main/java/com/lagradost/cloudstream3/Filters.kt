@@ -99,7 +99,7 @@ object ProviderInfoStore {
 // ------------------------------------------------------------------
 
 /** The list of main-page sections this provider exposes. */
-fun MainAPI.getMainPageItems(): List<MainPageRequest> = this.mainPage
+fun MainAPI.getMainPageItems(): List<MainPageData> = this.mainPage
 
 /**
  * Pull subtitles for [url] from a provider's [loadLinks]. Returns the
