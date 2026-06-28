@@ -2,7 +2,7 @@ package com.wavestream.plugins.repository
 
 import com.wavestream.core.network.app
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -119,7 +119,7 @@ object RepositoryManager {
             val response = app.get(convertRawGitUrl(pluginUrl))
             if (!response.status.isSuccess()) return null
 
-            val bytes = response.readBytes()
+            val bytes = response.readRawBytes()
             val tempFile = File(targetFile.parentFile, "${targetFile.name}.tmp")
             tempFile.writeBytes(bytes)
 

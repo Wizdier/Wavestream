@@ -20,26 +20,12 @@ import com.wavestream.features.search.SearchScreen
 import com.wavestream.features.settings.SettingsScreen
 import com.wavestream.ui.theme.WaveStreamTheme
 import io.ktor.http.encodeURLPath
+import androidx.savedstate.read
 
 private fun String.urlEncode(): String = encodeURLPath()
 
 /**
  * Root composable for the Wavestream app.
- *
- * Mirrors CloudStream's MainActivity + NuvioMobile's App.kt patterns:
- *   - Single activity / single composable
- *   - Navigation via Jetpack Navigation Compose
- *   - Bottom nav (phone) / nav rail (TV / landscape)
- *
- * Routes:
- *   home        → HomeScreen       (homepage with parallax hero + horizontal rails)
- *   search      → SearchScreen     (search across all providers + history)
- *   library     → LibraryScreen    (bookmarks + watch progress)
- *   downloads   → DownloadsScreen  (downloaded episodes/movies)
- *   settings    → SettingsScreen   (general / player / UI / providers / extensions)
- *   details/{apiName}/{url}  → DetailsScreen  (info page with episodes + cast + recommendations)
- *   player/{apiName}/{url}   → PlayerScreen   (full-screen ExoPlayer)
- *   extensions  → ExtensionsScreen  (manage installed plugins + Stremio addons)
  */
 @Composable
 fun App() {
@@ -121,15 +107,8 @@ fun App() {
                         navArgument("url") { type = NavType.StringType },
                     ),
                 ) { backStackEntry ->
-                    val args = backStackEntry.arguments
-                    @Suppress("UNCHECKED_CAST")
-                    val argMap = args?.let { savedState ->
-                        val cls = Class.forName("androidx.savedstate.SavedState")
-                        val method = cls.getMethod("getMap")
-                        method.invoke(savedState) as Map<String, Any?>
-                    } ?: emptyMap<String, Any?>()
-                    val apiName = argMap["apiName"] as? String ?: return@composable
-                    val url = argMap["url"] as? String ?: return@composable
+                    val apiName = backStackEntry.arguments?.read { getStringOrNull("apiName") } ?: return@composable
+                    val url = backStackEntry.arguments?.read { getStringOrNull("url") } ?: return@composable
                     DetailsScreen(
                         apiName = apiName,
                         url = url,
@@ -149,15 +128,8 @@ fun App() {
                         navArgument("url") { type = NavType.StringType },
                     ),
                 ) { backStackEntry ->
-                    val args = backStackEntry.arguments
-                    @Suppress("UNCHECKED_CAST")
-                    val argMap = args?.let { savedState ->
-                        val cls = Class.forName("androidx.savedstate.SavedState")
-                        val method = cls.getMethod("getMap")
-                        method.invoke(savedState) as Map<String, Any?>
-                    } ?: emptyMap<String, Any?>()
-                    val source = argMap["source"] as? String ?: return@composable
-                    val url = argMap["url"] as? String ?: return@composable
+                    val source = backStackEntry.arguments?.read { getStringOrNull("source") } ?: return@composable
+                    val url = backStackEntry.arguments?.read { getStringOrNull("url") } ?: return@composable
                     PlayerScreen(
                         source = source,
                         url = url,
@@ -168,4 +140,3 @@ fun App() {
         }
     }
 }
-

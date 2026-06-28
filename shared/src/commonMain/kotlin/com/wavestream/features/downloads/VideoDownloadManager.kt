@@ -8,7 +8,7 @@ import com.wavestream.api.TvType
 import com.wavestream.core.network.app
 import com.wavestream.core.storage.DataStore
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -162,7 +162,7 @@ object VideoDownloadManager {
         val response = app.get(task.link.url, headers = task.link.getAllHeaders() + rangeHeader)
         if (!response.status.isSuccess()) throw Exception("HTTP ${response.status.value}")
 
-        val bytes = response.readBytes()
+        val bytes = response.readRawBytes()
         // Append to file if resuming, otherwise create new
         if (existingBytes > 0) {
             RandomAccessFile(task.outputFile, "rw").use { raf ->
@@ -216,7 +216,7 @@ object VideoDownloadManager {
 
                 val segResponse = app.get(segment.url, headers = task.link.getAllHeaders())
                 if (!segResponse.status.isSuccess()) throw Exception("Segment $idx HTTP ${segResponse.status.value}")
-                var segBytes = segResponse.readBytes()
+                var segBytes = segResponse.readRawBytes()
 
                 // Decrypt if needed
                 if (segment.key != null) {

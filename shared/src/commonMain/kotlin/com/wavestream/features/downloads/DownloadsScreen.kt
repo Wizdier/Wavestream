@@ -135,6 +135,7 @@ private fun DownloadRow(
     }
 }
 
+@kotlinx.serialization.Serializable
 data class DownloadedItem(
     val id: String,
     val title: String,

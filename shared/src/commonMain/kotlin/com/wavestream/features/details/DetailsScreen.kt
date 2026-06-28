@@ -113,7 +113,7 @@ fun DetailsScreen(
                     }
                 }
                 loadResponse != null -> {
-                    val resp = loadResponse!!
+                    val resp = loadResponse ?: return@Box
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 32.dp),
