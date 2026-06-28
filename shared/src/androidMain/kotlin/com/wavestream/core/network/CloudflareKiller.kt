@@ -2,6 +2,7 @@ package com.wavestream.core.network
 
 import android.content.Context
 import android.webkit.CookieManager
+import android.webkit.WebSettings
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -10,6 +11,7 @@ import io.ktor.client.plugins.cookies.*
 import io.ktor.serialization.kotlinx.json.*
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.Response
 import java.util.concurrent.TimeUnit
 
@@ -46,7 +48,7 @@ class CloudflareKiller : Interceptor {
         if (webViewUserAgent == null) {
             webViewUserAgent = runCatching {
                 val ctx = appContext ?: return null
-                android.webkit.WebSettings.getDefaultUserAgentString(ctx)
+                WebSettings.getDefaultUserAgentString(ctx)
             }.getOrNull()
         }
         return webViewUserAgent
@@ -56,13 +58,28 @@ class CloudflareKiller : Interceptor {
         val request = chain.request()
         val host = request.url.host
         val cookies = savedCookies[host]
-        return if (cookies == null) {
+
+        if (cookies == null) {
             val response = chain.proceed(request)
-            if (response.header("Server") in CLOUDFLARE_SERVERS && response.code in ERROR_CODES) {
+            val server = response.header("Server")
+            if (server in CLOUDFLARE_SERVERS && response.code in ERROR_CODES) {
                 response.close()
-                bypassCloudflare(request)?.let { return it }
+                // Try to solve Cloudflare
+                val solved = solveCloudflare(request.url.toString())
+                if (solved) {
+                    val newCookies = savedCookies[host]
+                    if (newCookies != null) {
+                        val ua = webViewUserAgent?.let { mapOf("user-agent" to it) } ?: emptyMap()
+                        val cookieStr = newCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                        val newRequest = request.newBuilder()
+                            .header("Cookie", cookieStr)
+                            .apply { ua.forEach { (k, v) -> header(k, v) } }
+                            .build()
+                        return chain.proceed(newRequest)
+                    }
+                }
             }
-            response
+            return response
         } else {
             val ua = webViewUserAgent?.let { mapOf("user-agent" to it) } ?: emptyMap()
             val cookieStr = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
@@ -70,26 +87,20 @@ class CloudflareKiller : Interceptor {
                 .header("Cookie", cookieStr)
                 .apply { ua.forEach { (k, v) -> header(k, v) } }
                 .build()
-            chain.proceed(newRequest)
+            return chain.proceed(newRequest)
         }
     }
 
-    private fun bypassCloudflare(request: okhttp3.Request): Response? {
-        val url = request.url.toString()
+    private fun solveCloudflare(url: String): Boolean {
         val cookieString = runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()
         if (cookieString != null && cookieString.contains("cf_clearance")) {
-            savedCookies[request.url.host] = parseCookieMap(cookieString)
-        } else {
-            return null
+            val host = try { java.net.URI(url).host } catch (e: Exception) { return false }
+            savedCookies[host] = parseCookieMap(cookieString)
+            return true
         }
-        val cookies = savedCookies[request.url.host] ?: return null
-        val ua = webViewUserAgent?.let { mapOf("user-agent" to it) } ?: emptyMap()
-        val cookieStr = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
-        val newRequest = request.newBuilder()
-            .header("Cookie", cookieStr)
-            .apply { ua.forEach { (k, v) -> header(k, v) } }
-            .build()
-        return runCatching { chain.proceed(newRequest) }.getOrNull()
+        // In a full implementation, this would spawn a WebView to solve the challenge.
+        // For now, just check existing cookies.
+        return false
     }
 }
 

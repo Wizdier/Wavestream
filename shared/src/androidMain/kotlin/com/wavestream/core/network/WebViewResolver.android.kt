@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import kotlinx.coroutines.delay
@@ -19,7 +20,7 @@ actual class WebViewResolver {
     actual val webViewUserAgent: String? by lazy {
         runCatching {
             val ctx = appContext ?: return@lazy null
-            android.webkit.WebSettings.getDefaultUserAgentString(ctx)
+            WebSettings.getDefaultUserAgentString(ctx)
         }.getOrNull()
     }
 
