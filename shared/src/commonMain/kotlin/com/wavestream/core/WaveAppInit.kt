@@ -1,58 +1,83 @@
 package com.wavestream.core
 
 import com.wavestream.api.APIHolder
+import com.wavestream.core.storage.DataStore
 import com.wavestream.plugins.PluginManager
+import com.wavestream.plugins.repository.RepositoryManager
+import com.wavestream.plugins.stremio.StremioAddonRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
 
-/**
- * App initialization — mirrors CloudStream's MainActivity.onCreate plugin loading sequence.
- */
 object WaveAppInit {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var initialized = false
+
+    @Serializable
+    data class StoredRepo(val url: String, val name: String = "")
+    private val repoSerializer = StoredRepo.serializer()
+    private val repoListSerializer = ListSerializer(repoSerializer)
+
+    private const val REPOS_KEY = "cs_repositories_v3"
 
     fun initialize(pluginsDir: File, isSafeMode: Boolean = false) {
         if (initialized) return
         initialized = true
 
         if (isSafeMode) {
-            println("[WaveAppInit] Safe mode active — skipping plugin loading")
+            println("[WaveAppInit] Safe mode — skipping")
             return
         }
 
         scope.launch {
-            // Register built-in extractors so they're available immediately
+            // 1. Register built-in extractors
             registerBuiltInExtractors()
 
-            // Load local plugins
+            // 2. Load Stremio addons → register as MainAPI providers
+            StremioAddonRepository.initializeAll()
+
+            // 3. Load local plugins (.cs3 files)
             runCatching {
                 if (pluginsDir.exists()) {
-                    println("[WaveAppInit] Loading plugins from ${pluginsDir.absolutePath}")
                     PluginManager.loadAllFromDirectory(pluginsDir)
                 }
-            }.onFailure { e ->
-                println("[WaveAppInit] Failed to load plugins: ${e.message}")
             }
 
-            // Initialize all providers
-            runCatching {
-                APIHolder.initAll()
-            }.onFailure { e ->
-                println("[WaveAppInit] Failed to init providers: ${e.message}")
-            }
+            // 4. Fetch repos and download new plugins
+            loadRepositories(pluginsDir)
 
-            println("[WaveAppInit] Init complete — ${APIHolder.allProviders.toList().size} providers, ${APIHolder.extractorApis.toList().size} extractors")
+            // 5. Init all providers
+            APIHolder.initAll()
+
+            println("[WaveAppInit] Done — ${APIHolder.allProviders.toList().size} providers, ${APIHolder.extractorApis.toList().size} extractors")
         }
     }
 
-    /**
-     * Register built-in extractors that ship with the app.
-     * These are always available — no plugin installation needed.
-     */
+    private suspend fun loadRepositories(pluginsDir: File) {
+        val repos = DataStore.getSerializedList(REPOS_KEY, repoSerializer) ?: emptyList()
+        for (repo in repos) {
+            try {
+                val plugins = RepositoryManager.getRepoPlugins(repo.url) ?: continue
+                for (plugin in plugins) {
+                    val pluginFile = File(pluginsDir, RepositoryManager.getPluginFileName(plugin.internalName))
+                    if (pluginFile.exists()) continue // already downloaded
+                    println("[WaveAppInit] Downloading: ${plugin.name}")
+                    val downloaded = RepositoryManager.downloadPlugin(plugin.url, pluginFile, plugin.fileHash)
+                    if (downloaded != null) {
+                        PluginManager.loadPlugin(downloaded, repo.url)
+                        println("[WaveAppInit] Installed: ${plugin.name}")
+                    }
+                }
+            } catch (e: Throwable) {
+                println("[WaveAppInit] Repo fetch failed: ${repo.url} — ${e.message}")
+            }
+        }
+    }
+
     private fun registerBuiltInExtractors() {
         val extractors = listOf(
             com.wavestream.plugins.extractors.M3u8Manifest(),
@@ -70,7 +95,6 @@ object WaveAppInit {
         extractors.forEach { extractor ->
             if (APIHolder.extractorApis.toList().none { it.name == extractor.name }) {
                 APIHolder.extractorApis.add(extractor)
-                println("[WaveAppInit] Registered extractor: ${extractor.name}")
             }
         }
     }
