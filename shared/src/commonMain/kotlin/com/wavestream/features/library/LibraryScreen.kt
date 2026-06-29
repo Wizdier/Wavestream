@@ -67,7 +67,7 @@ fun LibraryScreen(
                                     override val name = bm.name
                                     override val url = bm.url
                                     override val apiName = bm.apiName
-                                    override var type: TvType? = bm.type
+                                    override var type: TvType? = runCatching { TvType.valueOf(bm.typeName) }.getOrNull()
                                     override var posterUrl: String? = bm.posterUrl
                                     override var posterHeaders: Map<String, String>? = null
                                     override var id: Int? = null

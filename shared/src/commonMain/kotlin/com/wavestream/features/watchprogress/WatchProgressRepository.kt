@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 
 @Serializable
 data class WatchProgress(
@@ -16,16 +17,18 @@ data class WatchProgress(
     val isCompleted: Boolean get() = progressPercent >= 0.9f
 }
 
+private const val KEY = "watch_progress_v2"
+private val serializer = WatchProgress.serializer()
+private val listSerializer = ListSerializer(serializer)
+
 object WatchProgressRepository {
-    private const val KEY = "watch_progress"
     private val _progress = MutableStateFlow<Map<String, WatchProgress>>(emptyMap())
     val progress: StateFlow<Map<String, WatchProgress>> = _progress.asStateFlow()
 
     init { loadAll() }
 
     fun loadAll() {
-        @Suppress("UNCHECKED_CAST")
-        val list = DataStore.getKey(KEY, List::class.java) as? List<WatchProgress> ?: emptyList()
+        val list = DataStore.getSerializedList(KEY, serializer) ?: emptyList()
         _progress.value = list.associateBy { it.id }
     }
 
@@ -37,10 +40,6 @@ object WatchProgressRepository {
     }
 
     fun get(id: String): WatchProgress? = _progress.value[id]
-
-    fun getForItem(apiName: String, url: String, episode: Int? = null, season: Int? = null): WatchProgress? {
-        return _progress.value[makeId(apiName, url, episode, season)]
-    }
 
     fun remove(id: String) {
         val current = _progress.value.toMutableMap()
@@ -61,10 +60,7 @@ object WatchProgressRepository {
             .take(limit)
     }
 
-    private fun makeId(apiName: String, url: String, episode: Int?, season: Int?): String =
-        "${apiName}_${url}_${season ?: 0}_${episode ?: 0}"
-
     private fun persist(list: List<WatchProgress>) {
-        DataStore.setKey(KEY, list)
+        DataStore.setSerializedList(KEY, list, serializer)
     }
 }

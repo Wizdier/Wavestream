@@ -37,7 +37,9 @@ import javax.crypto.spec.SecretKeySpec
  * State is exposed via StateFlow<DownloadState> for UI observation.
  */
 object VideoDownloadManager {
-    private const val STORAGE_KEY = "downloads"
+    private const val STORAGE_KEY = "downloads_v2"
+    private val downloadedItemSerializer = com.wavestream.features.downloads.DownloadedItem.serializer()
+    private val downloadedItemListSerializer = kotlinx.serialization.builtins.ListSerializer(downloadedItemSerializer)
     private const val MAX_CONCURRENT_DOWNLOADS = 3
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -331,11 +333,11 @@ object VideoDownloadManager {
                 sizeText = formatBytes(it.outputFile.length()),
                 type = it.type,
             ) }
-        DataStore.setKey(STORAGE_KEY, completed)
+        DataStore.setSerializedList(STORAGE_KEY, completed, downloadedItemSerializer)
     }
 
     fun loadPersistedDownloads(): List<DownloadedItem> {
-        return DataStore.getKey(STORAGE_KEY, List::class.java) as? List<DownloadedItem> ?: emptyList()
+        return DataStore.getSerializedList(STORAGE_KEY, downloadedItemSerializer) ?: emptyList()
     }
 
     private fun formatBytes(bytes: Long): String {

@@ -52,6 +52,7 @@ data class AuthData(
     val expiresAt: Long? = null,
 )
 
+@kotlinx.serialization.Serializable
 data class WatchStatusItem(
     val id: String,
     val title: String,
@@ -62,6 +63,7 @@ data class WatchStatusItem(
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
+@kotlinx.serialization.Serializable
 enum class WatchStatus {
     Watching, Completed, OnHold, Dropped, PlanToWatch, ReWatching;
 }
@@ -77,6 +79,8 @@ object LocalListSyncApi : SyncAPI {
 
     private const val STORAGE_FOLDER = "local_list"
     private const val WATCH_LIST_KEY = "watch_list"
+    private val watchStatusSerializer = WatchStatusItem.serializer()
+    private val watchStatusListSerializer = kotlinx.serialization.builtins.ListSerializer(watchStatusSerializer)
     private const val AUTH_KEY = "local_auth"
 
     override fun isAuthenticated(): Boolean = true  // Always authenticated (no account needed)
@@ -93,15 +97,14 @@ object LocalListSyncApi : SyncAPI {
     }
 
     override suspend fun getWatchList(): List<WatchStatusItem>? {
-        @Suppress("UNCHECKED_CAST")
-        return DataStore.getKey(STORAGE_FOLDER, WATCH_LIST_KEY, List::class.java) as? List<WatchStatusItem>
+        return DataStore.getSerializedList(WATCH_LIST_KEY, watchStatusSerializer)
     }
 
     override suspend fun setWatchStatus(item: WatchStatusItem): Boolean {
         val list = getWatchList()?.toMutableList() ?: mutableListOf()
         list.removeAll { it.id == item.id }
         list.add(item)
-        DataStore.setKey(STORAGE_FOLDER, WATCH_LIST_KEY, list)
+        DataStore.setSerializedList(WATCH_LIST_KEY, list, watchStatusSerializer)
         return true
     }
 

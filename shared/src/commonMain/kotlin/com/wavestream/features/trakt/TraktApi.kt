@@ -80,12 +80,14 @@ object TraktApi {
         }
     }
 
+    private val traktAuthSerializer = TraktAuth.serializer()
+
     fun saveAuth(auth: TraktAuth) {
-        DataStore.setKey(AUTH_KEY, auth)
+        DataStore.setSerialized(AUTH_KEY, auth, traktAuthSerializer)
     }
 
     fun loadAuth(): TraktAuth? {
-        return DataStore.getKey(AUTH_KEY, TraktAuth::class.java)
+        return DataStore.getSerialized(AUTH_KEY, traktAuthSerializer)
     }
 
     fun isAuthenticated(): Boolean = loadAuth() != null

@@ -115,7 +115,7 @@ fun HomeScreen(
                                 override val name = bm.name
                                 override val url = bm.url
                                 override val apiName = bm.apiName
-                                override var type: com.wavestream.api.TvType? = bm.type
+                                override var type: com.wavestream.api.TvType? = runCatching { com.wavestream.api.TvType.valueOf(bm.typeName) }.getOrNull()
                                 override var posterUrl: String? = bm.posterUrl
                                 override var posterHeaders: Map<String, String>? = null
                                 override var id: Int? = null

@@ -23,14 +23,14 @@ import com.wavestream.api.APIHolder
 import com.wavestream.core.storage.DataStore
 import com.wavestream.plugins.repository.RepositoryManager
 import com.wavestream.plugins.stremio.StremioAddonClient
-import com.wavestream.plugins.stremio.ManagedAddon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 
-private const val REPOS_KEY = "cs_repositories"
-private const val STREMIO_ADDONS_KEY = "stremio_addons"
+private const val REPOS_KEY = "cs_repositories_v2"
+private const val STREMIO_ADDONS_KEY = "stremio_addons_v2"
 
 @Serializable
 private data class StoredRepo(val url: String, val name: String = "")
@@ -38,9 +38,11 @@ private data class StoredRepo(val url: String, val name: String = "")
 @Serializable
 private data class StoredAddon(val manifestUrl: String, val name: String = "", val enabled: Boolean = true)
 
-/**
- * Extensions screen — manage CloudStream repositories, plugins, and Stremio addons.
- */
+private val repoSerializer = StoredRepo.serializer()
+private val repoListSerializer = ListSerializer(repoSerializer)
+private val addonSerializer = StoredAddon.serializer()
+private val addonListSerializer = ListSerializer(addonSerializer)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExtensionsScreen(
@@ -52,36 +54,35 @@ fun ExtensionsScreen(
     var newRepoUrl by remember { mutableStateOf("") }
     var newAddonUrl by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    // Load stored repos and addons
     val repos = remember { mutableStateListOf<StoredRepo>() }
     val stremioAddons = remember { mutableStateListOf<StoredAddon>() }
     val providers = remember { mutableStateListOf<ExtensionItem>() }
 
     LaunchedEffect(Unit) {
-        // Load stored repos
-        @Suppress("UNCHECKED_CAST")
-        val storedRepos = DataStore.getKey(REPOS_KEY, List::class.java) as? List<StoredRepo> ?: emptyList()
+        isLoading = true
+        // Load repos using proper serialization
+        val storedRepos = DataStore.getSerializedList(REPOS_KEY, repoSerializer) ?: emptyList()
         repos.clear()
         repos.addAll(storedRepos)
 
-        // Load stored Stremio addons
-        @Suppress("UNCHECKED_CAST")
-        val storedAddons = DataStore.getKey(STREMIO_ADDONS_KEY, List::class.java) as? List<StoredAddon> ?: emptyList()
+        // Load addons using proper serialization
+        val storedAddons = DataStore.getSerializedList(STREMIO_ADDONS_KEY, addonSerializer) ?: emptyList()
         stremioAddons.clear()
         stremioAddons.addAll(storedAddons)
 
-        // Load CS providers
+        // Load providers
         providers.clear()
         APIHolder.allProviders.toList().forEach { api ->
             providers.add(ExtensionItem(
                 id = api.name,
                 name = api.name,
-                subtitle = "${api.mainUrl} • ${api.lang}",
+                subtitle = "${api.mainUrl} - ${api.lang}",
                 enabled = true,
-                type = ExtensionType.CS3_PROVIDER,
             ))
         }
+        isLoading = false
     }
 
     Scaffold(
@@ -103,7 +104,6 @@ fun ExtensionsScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
-            // Status message
             if (statusMessage != null) {
                 item {
                     Text(
@@ -115,53 +115,30 @@ fun ExtensionsScreen(
                 }
             }
 
-            // Repositories section
+            // Repositories
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Repositories (${repos.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    TextButton(onClick = { showAddRepoDialog = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Add Repo")
-                    }
-                }
+                SectionHeader("Repositories (${repos.size})", "Add Repo") { showAddRepoDialog = true }
             }
             if (repos.isEmpty()) {
-                item {
-                    Text(
-                        "No repositories added. Tap 'Add Repo' to add a CloudStream repository URL.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
+                item { EmptyHint("No repositories added. Tap 'Add Repo' to add a CloudStream repository URL.") }
             } else {
                 items(repos, key = { it.url }) { repo ->
                     RepoRow(
                         repo = repo,
                         onDelete = {
                             repos.remove(repo)
-                            saveRepos(repos)
+                            DataStore.setSerializedList(REPOS_KEY, repos.toList(), repoSerializer)
                         },
                         onRefresh = {
                             scope.launch {
-                                statusMessage = "Refreshing ${repo.url}..."
+                                statusMessage = "Fetching ${repo.url}..."
                                 val plugins = withContext(Dispatchers.Default) {
-                                    RepositoryManager.getRepoPlugins(repo.url)
+                                    runCatching { RepositoryManager.getRepoPlugins(repo.url) }.getOrNull()
                                 }
-                                if (plugins != null) {
-                                    statusMessage = "Found ${plugins.size} plugins in ${repo.url}"
+                                statusMessage = if (plugins != null) {
+                                    "Found ${plugins.size} plugins in ${repo.url}"
                                 } else {
-                                    statusMessage = "Failed to fetch repository: ${repo.url}"
+                                    "Failed to fetch: ${repo.url}"
                                 }
                             }
                         },
@@ -169,35 +146,12 @@ fun ExtensionsScreen(
                 }
             }
 
-            // Stremio Addons section
+            // Stremio Addons
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Stremio Addons (${stremioAddons.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    TextButton(onClick = { showAddAddonDialog = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Add Addon")
-                    }
-                }
+                SectionHeader("Stremio Addons (${stremioAddons.size})", "Add Addon") { showAddAddonDialog = true }
             }
             if (stremioAddons.isEmpty()) {
-                item {
-                    Text(
-                        "No Stremio addons installed. Tap 'Add Addon' to add one by manifest URL.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
+                item { EmptyHint("No Stremio addons installed. Tap 'Add Addon' to add one by manifest URL.") }
             } else {
                 items(stremioAddons, key = { it.manifestUrl }) { addon ->
                     AddonRow(
@@ -206,36 +160,21 @@ fun ExtensionsScreen(
                             val idx = stremioAddons.indexOf(addon)
                             if (idx >= 0) {
                                 stremioAddons[idx] = addon.copy(enabled = !addon.enabled)
-                                saveAddons(stremioAddons)
+                                DataStore.setSerializedList(STREMIO_ADDONS_KEY, stremioAddons.toList(), addonSerializer)
                             }
                         },
                         onDelete = {
                             stremioAddons.remove(addon)
-                            saveAddons(stremioAddons)
+                            DataStore.setSerializedList(STREMIO_ADDONS_KEY, stremioAddons.toList(), addonSerializer)
                         },
                     )
                 }
             }
 
-            // CS3 Providers section
-            item {
-                Text(
-                    "CloudStream Providers (${providers.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
+            // Providers
+            item { SectionHeader("CloudStream Providers (${providers.size})", null, null) }
             if (providers.isEmpty()) {
-                item {
-                    Text(
-                        "No providers loaded. Add a repository above to install providers.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
+                item { EmptyHint("No providers loaded. Add a repository above to install providers.") }
             } else {
                 items(providers, key = { it.id }) { provider ->
                     ProviderRow(provider) { newValue ->
@@ -250,247 +189,175 @@ fun ExtensionsScreen(
         }
     }
 
-    // Add Repository dialog
     if (showAddRepoDialog) {
         AlertDialog(
             onDismissRequest = { showAddRepoDialog = false },
             title = { Text("Add Repository") },
             text = {
-                Column {
-                    Text(
-                        "Enter a CloudStream repository JSON URL.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newRepoUrl,
-                        onValueChange = { newRepoUrl = it },
-                        label = { Text("Repository URL") },
-                        placeholder = { Text("https://example.com/repo.json") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                OutlinedTextField(
+                    value = newRepoUrl,
+                    onValueChange = { newRepoUrl = it },
+                    label = { Text("Repository URL") },
+                    placeholder = { Text("https://example.com/repo.json") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newRepoUrl.isNotBlank()) {
-                            val url = newRepoUrl.trim()
-                            if (repos.none { it.url == url }) {
-                                repos.add(StoredRepo(url))
-                                saveRepos(repos)
-                                scope.launch {
-                                    statusMessage = "Fetching repository: $url"
-                                    val plugins = withContext(Dispatchers.Default) {
-                                        RepositoryManager.getRepoPlugins(url)
-                                    }
-                                    statusMessage = if (plugins != null) {
-                                        "Repository added. Found ${plugins.size} plugins."
-                                    } else {
-                                        "Repository added but failed to fetch plugins. Check the URL."
-                                    }
-                                }
+                TextButton(onClick = {
+                    val url = newRepoUrl.trim()
+                    if (url.isNotBlank() && repos.none { it.url == url }) {
+                        repos.add(StoredRepo(url))
+                        DataStore.setSerializedList(REPOS_KEY, repos.toList(), repoSerializer)
+                        scope.launch {
+                            statusMessage = "Fetching: $url"
+                            val plugins = withContext(Dispatchers.Default) {
+                                runCatching { RepositoryManager.getRepoPlugins(url) }.getOrNull()
                             }
-                            newRepoUrl = ""
+                            statusMessage = if (plugins != null) "Found ${plugins.size} plugins."
+                                else "Failed to fetch. Check URL."
                         }
-                        showAddRepoDialog = false
-                    },
-                ) { Text("Add") }
+                    }
+                    newRepoUrl = ""
+                    showAddRepoDialog = false
+                }) { Text("Add") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddRepoDialog = false }) { Text("Cancel") }
-            },
+            dismissButton = { TextButton(onClick = { showAddRepoDialog = false }) { Text("Cancel") } },
         )
     }
 
-    // Add Stremio Addon dialog
     if (showAddAddonDialog) {
         AlertDialog(
             onDismissRequest = { showAddAddonDialog = false },
             title = { Text("Add Stremio Addon") },
             text = {
-                Column {
-                    Text(
-                        "Enter a Stremio addon manifest URL.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newAddonUrl,
-                        onValueChange = { newAddonUrl = it },
-                        label = { Text("Manifest URL") },
-                        placeholder = { Text("https://example.com/manifest.json") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                OutlinedTextField(
+                    value = newAddonUrl,
+                    onValueChange = { newAddonUrl = it },
+                    label = { Text("Manifest URL") },
+                    placeholder = { Text("https://example.com/manifest.json") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newAddonUrl.isNotBlank()) {
-                            val url = newAddonUrl.trim()
-                            if (stremioAddons.none { it.manifestUrl == url }) {
-                                stremioAddons.add(StoredAddon(manifestUrl = url, name = url, enabled = true))
-                                saveAddons(stremioAddons)
-                                scope.launch {
-                                    statusMessage = "Fetching addon manifest: $url"
-                                    val name = withContext(Dispatchers.Default) {
-                                        try {
-                                            val client = StremioAddonClient(url)
-                                            val manifest = client.getManifest()
-                                            manifest.name
-                                        } catch (e: Throwable) {
-                                            url
-                                        }
-                                    }
-                                    val idx = stremioAddons.indexOfFirst { it.manifestUrl == url }
-                                    if (idx >= 0) {
-                                        stremioAddons[idx] = stremioAddons[idx].copy(name = name)
-                                        saveAddons(stremioAddons)
-                                    }
-                                    statusMessage = "Addon added: $name"
-                                }
+                TextButton(onClick = {
+                    val url = newAddonUrl.trim()
+                    if (url.isNotBlank() && stremioAddons.none { it.manifestUrl == url }) {
+                        stremioAddons.add(StoredAddon(manifestUrl = url, name = url, enabled = true))
+                        DataStore.setSerializedList(STREMIO_ADDONS_KEY, stremioAddons.toList(), addonSerializer)
+                        scope.launch {
+                            statusMessage = "Fetching: $url"
+                            val name = withContext(Dispatchers.Default) {
+                                runCatching {
+                                    StremioAddonClient(url).getManifest().name
+                                }.getOrElse { url }
                             }
-                            newAddonUrl = ""
+                            val idx = stremioAddons.indexOfFirst { it.manifestUrl == url }
+                            if (idx >= 0) {
+                                stremioAddons[idx] = stremioAddons[idx].copy(name = name)
+                                DataStore.setSerializedList(STREMIO_ADDONS_KEY, stremioAddons.toList(), addonSerializer)
+                            }
+                            statusMessage = "Added: $name"
                         }
-                        showAddAddonDialog = false
-                    },
-                ) { Text("Add") }
+                    }
+                    newAddonUrl = ""
+                    showAddAddonDialog = false
+                }) { Text("Add") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddAddonDialog = false }) { Text("Cancel") }
-            },
+            dismissButton = { TextButton(onClick = { showAddAddonDialog = false }) { Text("Cancel") } },
         )
     }
 }
 
 @Composable
-private fun RepoRow(repo: StoredRepo, onDelete: () -> Unit, onRefresh: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
+private fun SectionHeader(title: String, buttonText: String?, onButtonClick: (() -> Unit)?) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        if (buttonText != null && onButtonClick != null) {
+            TextButton(onClick = onButtonClick) {
+                Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(buttonText)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyHint(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun RepoRow(repo: StoredRepo, onDelete: () -> Unit, onRefresh: () -> Unit) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.CloudDownload, null, tint = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = repo.name.ifBlank { "Repository" },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                )
-                Text(
-                    text = repo.url,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
+            Column(Modifier.weight(1f)) {
+                Text(repo.name.ifBlank { "Repository" }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                Text(repo.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Filled.Extension, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-            }
+            IconButton(onClick = onRefresh) { Icon(Icons.Filled.Extension, "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "Delete", tint = MaterialTheme.colorScheme.error) }
         }
     }
 }
 
 @Composable
 private fun AddonRow(addon: StoredAddon, onToggle: () -> Unit, onDelete: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-    ) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Extension, null, tint = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = addon.name.ifBlank { "Stremio Addon" },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                )
-                Text(
-                    text = addon.manifestUrl,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
+            Column(Modifier.weight(1f)) {
+                Text(addon.name.ifBlank { "Stremio Addon" }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                Text(addon.manifestUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
             Switch(checked = addon.enabled, onCheckedChange = { onToggle() })
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-            }
+            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "Delete", tint = MaterialTheme.colorScheme.error) }
         }
     }
 }
 
 @Composable
 private fun ProviderRow(provider: ExtensionItem, onToggle: (Boolean) -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-    ) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Extension, null, tint = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column(Modifier.weight(1f)) {
                 Text(provider.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(provider.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(
-                checked = provider.enabled,
-                onCheckedChange = { newValue -> onToggle(newValue) },
-            )
+            Switch(checked = provider.enabled, onCheckedChange = { onToggle(it) })
         }
     }
 }
 
-private data class ExtensionItem(
-    val id: String,
-    val name: String,
-    val subtitle: String,
-    val enabled: Boolean,
-    val type: ExtensionType,
-)
-
-private enum class ExtensionType { CS3_PROVIDER, STREMIO_ADDON, JS_PLUGIN }
-
-private fun saveRepos(repos: List<StoredRepo>) {
-    DataStore.setKey(REPOS_KEY, repos)
-}
-
-private fun saveAddons(addons: List<StoredAddon>) {
-    DataStore.setKey(STREMIO_ADDONS_KEY, addons)
-}
+private data class ExtensionItem(val id: String, val name: String, val subtitle: String, val enabled: Boolean)

@@ -42,14 +42,14 @@ object EpisodeReleaseNotifications {
         val current = loadTrackedShows().toMutableList()
         current.removeAll { it.tmdbId == show.tmdbId }
         current.add(show)
-        DataStore.setKey(STORAGE_KEY, current)
+        DataStore.setSerializedList(STORAGE_KEY, current, trackedShowSerializer)
         _trackedShows.value = current
     }
 
     fun untrackShow(tmdbId: Int) {
         val current = loadTrackedShows().toMutableList()
         current.removeAll { it.tmdbId == tmdbId }
-        DataStore.setKey(STORAGE_KEY, current)
+        DataStore.setSerializedList(STORAGE_KEY, current, trackedShowSerializer)
         _trackedShows.value = current
     }
 
@@ -83,21 +83,22 @@ object EpisodeReleaseNotifications {
             } catch (e: Throwable) { }
         }
 
-        DataStore.setKey(NOTIFIED_KEY, notified)
+        DataStore.setSerializedList(NOTIFIED_KEY, notified, notifiedEpisodeSerializer)
     }
 
     private fun notifyNewEpisode(show: TrackedShow, season: Int, episode: Int, episodeTitle: String?) {
         println("[Notifications] New episode: ${show.name} S${season}E${episode} - ${episodeTitle ?: ""}")
     }
 
+    private val trackedShowSerializer = TrackedShow.serializer()
+    private val notifiedEpisodeSerializer = NotifiedEpisode.serializer()
+
     private fun loadTrackedShows(): List<TrackedShow> {
-        @Suppress("UNCHECKED_CAST")
-        return DataStore.getKey(STORAGE_KEY, List::class.java) as? List<TrackedShow> ?: emptyList()
+        return DataStore.getSerializedList(STORAGE_KEY, trackedShowSerializer) ?: emptyList()
     }
 
     private fun loadNotifiedEpisodes(): List<NotifiedEpisode> {
-        @Suppress("UNCHECKED_CAST")
-        return DataStore.getKey(NOTIFIED_KEY, List::class.java) as? List<NotifiedEpisode> ?: emptyList()
+        return DataStore.getSerializedList(NOTIFIED_KEY, notifiedEpisodeSerializer) ?: emptyList()
     }
 }
 
