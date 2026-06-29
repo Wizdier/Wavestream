@@ -38,6 +38,7 @@ fun DetailsScreen(
     url: String,
     onNavigateToPlayer: (url: String, source: String) -> Unit,
     onNavigateBack: () -> Unit,
+    onNavigateToDetails: (apiName: String, url: String) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
     var loadResponse by remember { mutableStateOf<LoadResponse?>(null) }
@@ -252,7 +253,7 @@ fun DetailsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     items(recs) { rec ->
-                                        PosterCard(item = rec, onClick = {})
+                                        PosterCard(item = rec, onClick = { onNavigateToDetails(rec.apiName, rec.url) })
                                     }
                                 }
                             }

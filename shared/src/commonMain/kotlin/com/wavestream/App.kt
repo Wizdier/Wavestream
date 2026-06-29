@@ -146,6 +146,10 @@ fun App() {
                             navController.navigate("player/$srcEncoded/$encoded")
                         },
                         onNavigateBack = { navController.popBackStack() },
+                        onNavigateToDetails = { detailApiName, detailUrl ->
+                            val encoded = detailUrl.urlEncode()
+                            navController.navigate("details/$detailApiName/$encoded")
+                        },
                     )
                 }
 

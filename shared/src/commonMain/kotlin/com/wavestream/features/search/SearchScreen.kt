@@ -1,5 +1,6 @@
 package com.wavestream.features.search
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -7,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.wavestream.api.APIHolder
@@ -31,10 +34,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Search screen — mirrors CloudStream's SearchFragment.
- * This is a main tab (accessible via bottom navigation).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
@@ -44,8 +43,13 @@ fun SearchScreen(
     var results by remember { mutableStateOf<List<SearchResponse>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
+    var hasSearched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    // Load search history
+    val searchHistory = remember { SearchHistoryRepository.load() }
 
     // Debounced search
     LaunchedEffect(query) {
@@ -53,20 +57,24 @@ fun SearchScreen(
         if (query.isBlank()) {
             results = emptyList()
             isLoading = false
+            hasSearched = false
             return@LaunchedEffect
         }
         searchJob = scope.launch {
             delay(300)
             isLoading = true
+            hasSearched = true
             results = performSearch(query)
             isLoading = false
+            // Save to history
+            if (results.isNotEmpty()) {
+                SearchHistoryRepository.add(query, results.size)
+            }
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        // Search bar at top — no Scaffold/TopAppBar since this is a main tab
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Search bar
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -88,26 +96,59 @@ fun SearchScreen(
             shape = MaterialTheme.shapes.large,
         )
 
-        // Results
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                    )
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                query.isBlank() && searchHistory.isNotEmpty() -> {
+                    // Show search history
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        Text(
+                            "Recent Searches",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        searchHistory.forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        query = item.query
+                                        keyboard?.show()
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Filled.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text(item.query, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                Spacer(Modifier.weight(1f))
+                                if (item.resultCount > 0) {
+                                    Text("${item.resultCount} results", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        if (searchHistory.isNotEmpty()) {
+                            TextButton(onClick = { SearchHistoryRepository.clear() }) {
+                                Text("Clear History")
+                            }
+                        }
+                    }
                 }
                 query.isBlank() -> {
                     EmptyState(
                         title = "Search",
                         message = "Start typing to search across all providers.",
-                        icon = "🔍",
+                        icon = "Search",
                     )
                 }
-                results.isEmpty() -> {
+                hasSearched && results.isEmpty() -> {
                     EmptyState(
                         title = "No results",
-                        message = "No results found for \"$query\". Try a different search term.",
-                        icon = "📭",
+                        message = "No results found for \"$query\".\nTry a different search term or install more extensions.",
+                        icon = "Empty",
                     )
                 }
                 else -> {

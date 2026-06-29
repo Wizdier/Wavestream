@@ -238,7 +238,13 @@ fun ExtensionsScreen(
                 }
             } else {
                 items(providers, key = { it.id }) { provider ->
-                    ProviderRow(provider)
+                    ProviderRow(provider) { newValue ->
+                        val idx = providers.indexOfFirst { it.id == provider.id }
+                        if (idx >= 0) {
+                            providers[idx] = provider.copy(enabled = newValue)
+                            DataStore.setKey("provider_enabled_${provider.id}", newValue)
+                        }
+                    }
                 }
             }
         }
@@ -443,7 +449,7 @@ private fun AddonRow(addon: StoredAddon, onToggle: () -> Unit, onDelete: () -> U
 }
 
 @Composable
-private fun ProviderRow(provider: ExtensionItem) {
+private fun ProviderRow(provider: ExtensionItem, onToggle: (Boolean) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
@@ -463,7 +469,10 @@ private fun ProviderRow(provider: ExtensionItem) {
                 Text(provider.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(provider.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = provider.enabled, onCheckedChange = {})
+            Switch(
+                checked = provider.enabled,
+                onCheckedChange = { newValue -> onToggle(newValue) },
+            )
         }
     }
 }

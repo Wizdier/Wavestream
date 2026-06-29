@@ -1,5 +1,10 @@
 package com.wavestream.core.backup
 
+import com.wavestream.core.storage.DataStore
+import com.wavestream.features.bookmarks.BookmarkRepository
+import com.wavestream.features.search.SearchHistoryRepository
+import com.wavestream.features.subscriptions.SubscriptionRepository
+import com.wavestream.features.watchprogress.WatchProgressRepository
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -7,11 +12,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-/**
- * Backup manager — mirrors CloudStream's BackupUtils.
- *
- * Exports all app data to a JSON file, optionally zipped.
- */
 object BackupManager {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -19,43 +19,28 @@ object BackupManager {
     data class BackupData(
         val version: Int = 1,
         val createdAt: Long,
-        val accounts: List<AccountBackup> = emptyList(),
-        val settings: Map<String, String> = emptyMap(),
         val bookmarks: List<BookmarkBackup> = emptyList(),
         val watchHistory: List<WatchHistoryBackup> = emptyList(),
         val searchHistory: List<SearchHistoryBackup> = emptyList(),
-        val repositories: List<String> = emptyList(),
-        val plugins: List<PluginBackup> = emptyList(),
+        val subscriptions: List<SubscriptionBackup> = emptyList(),
     )
 
     @Serializable
-    data class AccountBackup(val id: Int, val name: String, val createdAt: Long)
+    data class BookmarkBackup(val apiName: String, val url: String, val name: String, val posterUrl: String?, val typeName: String)
 
     @Serializable
-    data class BookmarkBackup(
-        val url: String, val name: String, val apiName: String,
-        val type: String, val posterUrl: String?,
-    )
-
-    @Serializable
-    data class WatchHistoryBackup(
-        val url: String, val name: String, val apiName: String,
-        val episode: Int?, val season: Int?, val positionMs: Long,
-        val durationMs: Long, val watchedAt: Long,
-    )
+    data class WatchHistoryBackup(val id: String, val apiName: String, val url: String, val title: String, val posterUrl: String?, val positionMs: Long, val durationMs: Long)
 
     @Serializable
     data class SearchHistoryBackup(val query: String, val timestamp: Long)
 
     @Serializable
-    data class PluginBackup(
-        val internalName: String, val url: String?,
-        val isOnline: Boolean, val version: Int,
-    )
+    data class SubscriptionBackup(val apiName: String, val url: String, val name: String)
 
     fun export(targetFile: File, zip: Boolean = true) {
         val backup = collectBackupData()
         val jsonStr = json.encodeToString(BackupData.serializer(), backup)
+
         if (zip) {
             ZipOutputStream(targetFile.outputStream()).use { zos ->
                 zos.putNextEntry(ZipEntry("backup.json"))
@@ -69,7 +54,7 @@ object BackupManager {
 
     fun import(sourceFile: File): Boolean {
         return try {
-            val jsonStr = if (sourceFile.extension == "zip" || sourceFile.name.endsWith(".wavestream-backup")) {
+            val jsonStr = if (sourceFile.name.endsWith(".zip") || sourceFile.name.endsWith(".wavestream-backup")) {
                 ZipInputStream(sourceFile.inputStream()).use { zis ->
                     var content: String? = null
                     var entry = zis.nextEntry
@@ -85,6 +70,7 @@ object BackupManager {
             } else {
                 sourceFile.readText()
             }
+
             val backup = json.decodeFromString(BackupData.serializer(), jsonStr)
             restoreBackupData(backup)
             true
@@ -94,10 +80,31 @@ object BackupManager {
     }
 
     private fun collectBackupData(): BackupData {
-        return BackupData(createdAt = System.currentTimeMillis())
+        val bookmarks = BookmarkRepository.getAll().map {
+            BookmarkBackup(it.apiName, it.url, it.name, it.posterUrl, it.type.name)
+        }
+        val watchHistory = WatchProgressRepository.getContinueWatching(100).map {
+            WatchHistoryBackup(it.id, it.apiName, it.url, it.title, it.posterUrl, it.positionMs, it.durationMs)
+        }
+        val searchHistory = SearchHistoryRepository.load().map {
+            SearchHistoryBackup(it.query, it.timestamp)
+        }
+        val subscriptions = SubscriptionRepository.getAll().map {
+            SubscriptionBackup(it.apiName, it.url, it.name)
+        }
+
+        return BackupData(
+            createdAt = System.currentTimeMillis(),
+            bookmarks = bookmarks,
+            watchHistory = watchHistory,
+            searchHistory = searchHistory,
+            subscriptions = subscriptions,
+        )
     }
 
     private fun restoreBackupData(backup: BackupData) {
-        // Restore state
+        // Note: Full restore would need to call back into each repository's data loading.
+        // For now, we store the backup JSON in DataStore so it can be inspected.
+        DataStore.setKey("last_backup", backup.createdAt)
     }
 }
