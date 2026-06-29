@@ -8,6 +8,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.wavestream.App
 import com.wavestream.core.AppLogger
 import com.wavestream.core.WaveAppInit
+import com.wavestream.core.initWaveAppInit
 import com.wavestream.core.network.NetworkClient
 import com.wavestream.core.network.initCloudflareKiller
 import com.wavestream.core.network.initNetworkClient
@@ -39,11 +40,16 @@ class MainActivity : ComponentActivity() {
         // Initialize plugin manager + load all plugins
         initPluginManager(this)
 
+        // Set the plugins directory for getDefaultPluginsDirPlatform() to use
+        val pluginsDir = File(filesDir, "Extensions")
+        initWaveAppInit(filesDir)
+
         // Load built-in extractors and plugins from disk
-        WaveAppInit.initialize(File(filesDir, "Extensions"))
+        WaveAppInit.initialize(pluginsDir)
 
         setContent {
             App()
         }
     }
 }
+

@@ -58,7 +58,7 @@ actual suspend fun loadPluginInternalPlatform(file: File): BasePlugin? {
         @Suppress("UNCHECKED_CAST")
         val pluginClass = loader.loadClass(pluginClassName)
         val pluginInstance = pluginClass.getDeclaredConstructor().newInstance() as BasePlugin
-
+        pluginInstance.version = version
         pluginInstance
     } catch (e: Throwable) {
         println("[PluginManager] Failed to load $file: ${e.message}")

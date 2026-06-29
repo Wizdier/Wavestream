@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -165,6 +166,26 @@ fun DetailsScreen(
                                                     onNavigateToPlayer(best.url, best.source)
                                                 }
                                             }
+                                        }
+                                    }
+                                },
+                                onShowSources = {
+                                    scope.launch {
+                                        isLoadingLinks = true
+                                        val links = if (resp.type.isMovieType()) {
+                                            loadLinksForItem(apiName, resp, null)
+                                        } else {
+                                            val firstEp = when (resp) {
+                                                is TvSeriesLoadResponse -> resp.episodes.firstOrNull()
+                                                is AnimeLoadResponse -> resp.episodes.values.firstOrNull()?.firstOrNull()
+                                                else -> null
+                                            }
+                                            loadLinksForItem(apiName, resp, firstEp)
+                                        }
+                                        isLoadingLinks = false
+                                        if (links.isNotEmpty()) {
+                                            availableLinks = links
+                                            showLinkPicker = true
                                         }
                                     }
                                 },
@@ -335,7 +356,12 @@ private fun DetailsHero(response: LoadResponse) {
 }
 
 @Composable
-private fun DetailsActions(response: LoadResponse, isLoadingLinks: Boolean, onPlay: () -> Unit) {
+private fun DetailsActions(
+    response: LoadResponse,
+    isLoadingLinks: Boolean,
+    onPlay: () -> Unit,
+    onShowSources: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -354,6 +380,14 @@ private fun DetailsActions(response: LoadResponse, isLoadingLinks: Boolean, onPl
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(if (response.type.isMovieType()) "Play" else "Play First Episode")
             }
+        }
+        OutlinedButton(
+            onClick = onShowSources,
+            enabled = !isLoadingLinks,
+        ) {
+            Icon(Icons.Filled.VideoLibrary, contentDescription = null)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Sources")
         }
     }
 }

@@ -1,39 +1,52 @@
 package com.wavestream.features.home
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.wavestream.api.APIHolder
 import com.wavestream.api.HomePageList
 import com.wavestream.api.MainPageRequest
 import com.wavestream.api.SearchResponse
+import com.wavestream.core.WaveAppInit
 import com.wavestream.features.bookmarks.BookmarkRepository
 import com.wavestream.features.watchprogress.WatchProgressRepository
 import com.wavestream.ui.components.EmptyState
 import com.wavestream.ui.components.PosterCard
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * Home screen — mirrors CloudStream's HomeFragment.
- * This is a main tab (accessible via bottom navigation).
+ *
+ * Layout:
+ *   - Hero (random item from first provider rail)
+ *   - Continue Watching (from WatchProgressRepository)
+ *   - Bookmarks rail
+ *   - Provider rails (one per provider × mainPage entry)
  */
 @Composable
 fun HomeScreen(
@@ -46,9 +59,28 @@ fun HomeScreen(
     var heroItem by remember { mutableStateOf<SearchResponse?>(null) }
     val continueWatching by WatchProgressRepository.progress.collectAsState()
     val bookmarks by BookmarkRepository.bookmarks.collectAsState()
+    val initState by WaveAppInit.initState.collectAsState()
 
+    // Auto-reload home when init state transitions to Ready
+    var lastInitGeneration by remember { mutableStateOf(0) }
+    LaunchedEffect(initState) {
+        if (initState is com.wavestream.core.InitState.Ready) {
+            val newGen = (initState as com.wavestream.core.InitState.Ready).providerCount
+            if (newGen != lastInitGeneration) {
+                lastInitGeneration = newGen
+                scope.launch {
+                    isLoading = true
+                    sections = loadHomeContent()
+                    heroItem = sections.firstOrNull()?.list?.randomOrNull()
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    // Initial load
     LaunchedEffect(Unit) {
-        scope.launch {
+        if (sections.isEmpty()) {
             isLoading = true
             sections = loadHomeContent()
             heroItem = sections.firstOrNull()?.list?.randomOrNull()
@@ -56,8 +88,11 @@ fun HomeScreen(
         }
     }
 
+    val lazyState = rememberLazyListState()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = lazyState,
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
         // Hero section
@@ -128,14 +163,14 @@ fun HomeScreen(
             }
         }
 
-        // Loading state
+        // Loading skeleton
         if (isLoading) {
             item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator()
+                    Spacer(Modifier.height(12.dp))
+                    val msg = (initState as? com.wavestream.core.InitState.Loading)?.message ?: "Loading content..."
+                    Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -155,8 +190,17 @@ fun HomeScreen(
             item {
                 EmptyState(
                     title = "No content available",
-                    message = "Install extensions from Settings → Extensions to start watching.",
+                    message = "Install extensions from Settings → Extensions to start watching. Both CloudStream repositories (.cs3) and Stremio addons are supported.",
                 )
+            }
+            item {
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                    Button(onClick = onNavigateToSearch) {
+                        Icon(Icons.Filled.Search, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Search")
+                    }
+                }
             }
         }
     }
@@ -225,6 +269,8 @@ private fun HeroSection(
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(8.dp))
                 Row {
@@ -277,21 +323,28 @@ private fun HomeRail(
 private suspend fun loadHomeContent(): List<HomePageList> = withContext(Dispatchers.Default) {
     val providers = APIHolder.allProviders.toList().filter { it.hasMainPage }
     if (providers.isEmpty()) return@withContext emptyList()
-    val sections = mutableListOf<HomePageList>()
-    providers.forEach { api ->
-        api.mainPage.forEach { mainPageData ->
-            try {
-                val response = api.getMainPage(
-                    1,
-                    MainPageRequest(mainPageData.name, mainPageData.data, mainPageData.horizontalImages),
-                )
-                response?.items?.forEach { list ->
-                    sections.add(list.copy(name = "${list.name} • ${api.name}"))
-                }
-            } catch (e: Throwable) {
-                // Skip failed providers
+
+    // Parallel fetch across all providers × mainPage entries
+    val deferredList = mutableListOf<kotlinx.coroutines.Deferred<List<HomePageList>>>()
+    kotlinx.coroutines.coroutineScope {
+        for (api in providers) {
+            for (mainPageData in api.mainPage) {
+                deferredList.add(async {
+                    try {
+                        val response = api.getMainPage(
+                            1,
+                            MainPageRequest(mainPageData.name, mainPageData.data, mainPageData.horizontalImages),
+                        )
+                        response?.items?.map { list ->
+                            list.copy(name = "${list.name} • ${api.name}")
+                        } ?: emptyList()
+                    } catch (e: Throwable) {
+                        println("[Home] Failed to load ${api.name}/${mainPageData.name}: ${e.message}")
+                        emptyList()
+                    }
+                })
             }
         }
     }
-    sections
+    deferredList.awaitAll().flatten()
 }

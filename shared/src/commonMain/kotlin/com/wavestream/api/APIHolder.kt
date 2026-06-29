@@ -77,9 +77,15 @@ object APIHolder {
     fun getApiFromName(apiName: String?): MainAPI? {
         if (apiName == null) return null
         initMap()
-        val map = apiMap ?: return null
-        val idx = map[apiName] ?: return null
-        return apis.toList().getOrNull(idx)
+        val map = apiMap
+        if (map != null) {
+            val idx = map[apiName]
+            if (idx != null) {
+                apis.toList().getOrNull(idx)?.let { return it }
+            }
+        }
+        // Fallback: search allProviders directly
+        return allProviders.toList().firstOrNull { it.name == apiName }
     }
 
     fun getApiFromUrl(url: String): MainAPI? {

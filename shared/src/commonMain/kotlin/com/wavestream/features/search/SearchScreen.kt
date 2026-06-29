@@ -1,19 +1,23 @@
 package com.wavestream.features.search
 
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -31,9 +35,20 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Search screen — mirrors CloudStream's SearchFragment.
+ *
+ * Features:
+ *   - Debounced search (300ms after typing stops)
+ *   - Provider filter chips (limit search to specific providers)
+ *   - Per-provider result counts shown
+ *   - Recent searches history
+ *   - Loading state per provider (not just global)
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
@@ -48,23 +63,34 @@ fun SearchScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
+    // Provider filter — empty means search all providers
+    val allProviders = remember { APIHolder.allProviders.toList() }
+    var selectedProviders by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // Per-provider progress (for showing counts and loading state)
+    var providerCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+
     // Load search history
     val searchHistory = remember { SearchHistoryRepository.load() }
 
     // Debounced search
-    LaunchedEffect(query) {
+    LaunchedEffect(query, selectedProviders) {
         searchJob?.cancel()
         if (query.isBlank()) {
             results = emptyList()
             isLoading = false
             hasSearched = false
+            providerCounts = emptyMap()
             return@LaunchedEffect
         }
         searchJob = scope.launch {
             delay(300)
             isLoading = true
             hasSearched = true
-            results = performSearch(query)
+            providerCounts = emptyMap()
+            results = performSearch(query, selectedProviders) { apiName, count ->
+                providerCounts = providerCounts + (apiName to count)
+            }
             isLoading = false
             // Save to history
             if (results.isNotEmpty()) {
@@ -96,13 +122,62 @@ fun SearchScreen(
             shape = MaterialTheme.shapes.large,
         )
 
+        // Provider filter chips (only show when there are providers)
+        if (allProviders.isNotEmpty() && query.isNotBlank()) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedProviders.isEmpty(),
+                        onClick = { selectedProviders = emptySet() },
+                        label = { Text("All (${allProviders.size})") },
+                    )
+                }
+                items(allProviders, key = { it.name + it.mainUrl }) { provider ->
+                    val isSelected = provider.name in selectedProviders
+                    val count = providerCounts[provider.name] ?: 0
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            selectedProviders = if (isSelected) {
+                                selectedProviders - provider.name
+                            } else {
+                                selectedProviders + provider.name
+                            }
+                        },
+                        label = {
+                            Text(
+                                if (count > 0) "${provider.name} ($count)"
+                                else provider.name,
+                                maxLines = 1,
+                            )
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         Box(modifier = Modifier.fillMaxSize()) {
             when {
-                isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                isLoading && results.isEmpty() -> {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Searching across ${if (selectedProviders.isEmpty()) allProviders.size else selectedProviders.size} providers...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 query.isBlank() && searchHistory.isNotEmpty() -> {
-                    // Show search history
                     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                         Text(
                             "Recent Searches",
@@ -140,11 +215,15 @@ fun SearchScreen(
                 query.isBlank() -> {
                     EmptyState(
                         title = "Search",
-                        message = "Start typing to search across all providers.",
+                        message = if (allProviders.isEmpty()) {
+                            "No providers loaded. Add extensions in Settings → Extensions first."
+                        } else {
+                            "Start typing to search across ${allProviders.size} providers."
+                        },
                         icon = "Search",
                     )
                 }
-                hasSearched && results.isEmpty() -> {
+                hasSearched && results.isEmpty() && !isLoading -> {
                     EmptyState(
                         title = "No results",
                         message = "No results found for \"$query\".\nTry a different search term or install more extensions.",
@@ -171,8 +250,14 @@ fun SearchScreen(
     }
 }
 
-private suspend fun performSearch(query: String): List<SearchResponse> = withContext(Dispatchers.Default) {
-    val providers = APIHolder.apis.toList()
+private suspend fun performSearch(
+    query: String,
+    selectedProviders: Set<String>,
+    onProviderResults: (String, Int) -> Unit,
+): List<SearchResponse> = withContext(Dispatchers.Default) {
+    val providers = APIHolder.allProviders.toList().filter { api ->
+        selectedProviders.isEmpty() || api.name in selectedProviders
+    }
     val results = mutableListOf<SearchResponse>()
 
     kotlinx.coroutines.coroutineScope {
@@ -181,10 +266,17 @@ private suspend fun performSearch(query: String): List<SearchResponse> = withCon
                 try {
                     val repo = APIRepository(api)
                     when (val res = repo.search(query, 1)) {
-                        is Resource.Success -> res.value.items
-                        else -> emptyList()
+                        is Resource.Success -> {
+                            onProviderResults(api.name, res.value.items.size)
+                            res.value.items
+                        }
+                        else -> {
+                            onProviderResults(api.name, 0)
+                            emptyList()
+                        }
                     }
                 } catch (e: Throwable) {
+                    onProviderResults(api.name, 0)
                     emptyList()
                 }
             }

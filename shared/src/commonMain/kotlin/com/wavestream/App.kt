@@ -21,10 +21,42 @@ import com.wavestream.features.search.SearchScreen
 import com.wavestream.features.settings.SettingsScreen
 import com.wavestream.ui.components.WaveBottomBar
 import com.wavestream.ui.theme.WaveStreamTheme
-import io.ktor.http.encodeURLPath
 import androidx.savedstate.read
 
-private fun String.urlEncode(): String = encodeURLPath()
+private fun String.urlEncode(): String {
+    // Use URL-encoded form to handle special characters (colons, slashes, etc.)
+    val sb = StringBuilder()
+    for (byte in toByteArray()) {
+        val v = byte.toInt() and 0xFF
+        val c = v.toChar()
+        if (c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '-' || c == '_' || c == '.' || c == '~') {
+            sb.append(c)
+        } else {
+            sb.append('%')
+            sb.append("0123456789ABCDEF"[v shr 4])
+            sb.append("0123456789ABCDEF"[v and 0x0F])
+        }
+    }
+    return sb.toString()
+}
+
+private fun String.urlDecode(): String {
+    val sb = StringBuilder()
+    var i = 0
+    while (i < length) {
+        val c = this[i]
+        if (c == '%' && i + 2 < length) {
+            val hex = substring(i + 1, i + 3)
+            val v = hex.toInt(16)
+            sb.append(v.toChar())
+            i += 3
+        } else {
+            sb.append(c)
+            i++
+        }
+    }
+    return sb.toString()
+}
 
 /** Routes that show the bottom navigation bar. */
 private val mainRoutes = setOf("home", "search", "library", "downloads", "settings")
@@ -75,7 +107,7 @@ fun App() {
                     HomeScreen(
                         onNavigateToDetails = { apiName, url ->
                             val encoded = url.urlEncode()
-                            navController.navigate("details/$apiName/$encoded")
+                            navController.navigate("details/${apiName.urlEncode()}/$encoded")
                         },
                         onNavigateToSearch = {
                             navController.navigate("search") {
@@ -93,7 +125,7 @@ fun App() {
                     SearchScreen(
                         onNavigateToDetails = { apiName, url ->
                             val encoded = url.urlEncode()
-                            navController.navigate("details/$apiName/$encoded")
+                            navController.navigate("details/${apiName.urlEncode()}/$encoded")
                         },
                     )
                 }
@@ -102,7 +134,7 @@ fun App() {
                     LibraryScreen(
                         onNavigateToDetails = { apiName, url ->
                             val encoded = url.urlEncode()
-                            navController.navigate("details/$apiName/$encoded")
+                            navController.navigate("details/${apiName.urlEncode()}/$encoded")
                         },
                     )
                 }
@@ -135,8 +167,8 @@ fun App() {
                         navArgument("url") { type = NavType.StringType },
                     ),
                 ) { backStackEntry ->
-                    val apiName = backStackEntry.arguments?.read { getStringOrNull("apiName") } ?: return@composable
-                    val url = backStackEntry.arguments?.read { getStringOrNull("url") } ?: return@composable
+                    val apiName = backStackEntry.arguments?.read { getStringOrNull("apiName") }?.urlDecode() ?: return@composable
+                    val url = backStackEntry.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
                     DetailsScreen(
                         apiName = apiName,
                         url = url,
@@ -148,7 +180,7 @@ fun App() {
                         onNavigateBack = { navController.popBackStack() },
                         onNavigateToDetails = { detailApiName, detailUrl ->
                             val encoded = detailUrl.urlEncode()
-                            navController.navigate("details/$detailApiName/$encoded")
+                            navController.navigate("details/${detailApiName.urlEncode()}/$encoded")
                         },
                     )
                 }
@@ -160,8 +192,8 @@ fun App() {
                         navArgument("url") { type = NavType.StringType },
                     ),
                 ) { backStackEntry ->
-                    val source = backStackEntry.arguments?.read { getStringOrNull("source") } ?: return@composable
-                    val url = backStackEntry.arguments?.read { getStringOrNull("url") } ?: return@composable
+                    val source = backStackEntry.arguments?.read { getStringOrNull("source") }?.urlDecode() ?: return@composable
+                    val url = backStackEntry.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
                     PlayerScreen(
                         source = source,
                         url = url,
@@ -172,3 +204,4 @@ fun App() {
         }
     }
 }
+

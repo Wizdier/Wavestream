@@ -3,14 +3,12 @@ package com.wavestream.plugins
 import com.wavestream.api.APIHolder
 import com.wavestream.api.MainAPI
 import com.wavestream.api.ExtractorApi
-import com.wavestream.core.network.NetworkClient
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Base plugin class — mirrors CloudStream's `com.lagradost.cloudstream3.plugins.BasePlugin`.
  *
- * A plugin is a .ws3 file (zip containing classes.dex + manifest.json) on Android,
+ * A plugin is a .ws3/.cs3 file (zip containing classes.dex + manifest.json) on Android,
  * or a .jar file on Desktop.
  *
  * Subclasses override `load()` and call `registerMainAPI(provider)` / `registerExtractorAPI(extractor)`
@@ -31,6 +29,9 @@ abstract class BasePlugin {
 
     /** URL the plugin was downloaded from (null for local plugins). */
     var sourceUrl: String? = null
+
+    /** Plugin version, populated from the manifest after load. */
+    var version: Int = PLUGIN_VERSION_NOT_SET
 
     /** Called when the plugin is being unloaded — override for cleanup. */
     open fun beforeUnload() {}

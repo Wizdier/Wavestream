@@ -6,6 +6,13 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Use a JDK 17 toolchain — Gradle's foojay resolver auto-downloads it if missing
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+}
+
 kotlin {
     androidTarget()
 

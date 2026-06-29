@@ -1,235 +1,166 @@
 # Wavestream
 
-A modern media center for Android built with Kotlin Multiplatform and Compose Multiplatform. Combines the best of CloudStream's extension system with NuvioMobile's Stremio addon + JS plugin support.
+A modern media center built with Kotlin Multiplatform + Compose Multiplatform.
+A fork-style reimplementation of CloudStream 3 with a Compose Multiplatform UI skin.
 
-## Features
+> **Goal**: Take CloudStream's proven plugin/repository/extractor infrastructure and put a fresh,
+> modern Compose Multiplatform UI on top — for both Android and Desktop.
 
-### Extension System (3 ways to add content)
+## What's working right now
 
-1. **CloudStream-style providers** (`.ws3` DEX plugins)
-   - Compile-time JAR containing `MainAPI` + `ExtractorApi` contracts
-   - Runtime-loaded via `PathClassLoader` (Android) or `URLClassLoader` (Desktop)
-   - Plugin manifest.json declares entry point class
-   - Repository manager fetches plugin lists from JSON repo URLs
-   - SHA-256 hash verification on download
-   - Safe mode for recovery from boot-looping extensions
-   - Full backwards compatibility with existing CloudStream extensions
+### ✅ Stremio addon support (HTTP-based, native)
+- Add any Stremio addon by manifest URL (`https://.../manifest.json`)
+- Stremio addons are wrapped as `MainAPI` providers, so they integrate seamlessly with Home, Search, Details
+- Catalogs fetched from `/catalog/{type}/{id}.json` with pagination
+- Metadata fetched from `/meta/{type}/{id}.json`
+- Streams fetched from `/stream/{type}/{videoId}.json`
+- Subtitles and proxy headers from `behaviorHints` are passed through to the player
+- API key in manifest URL query string is propagated to all resource URLs
+- Tested with the official Cinemeta addon (`https://v3-cinemeta.strem.io/manifest.json`)
 
-2. **Stremio addons** (HTTP-based)
-   - Fetch manifest from `/manifest.json`
-   - Call `/catalog/{type}/{id}.json` for home pages
-   - Call `/meta/{type}/{id}.json` for metadata
-   - Call `/stream/{type}/{videoId}.json` for playable streams
-   - URL-encoded path segments per RFC 3986
-   - Query string propagation (for API key auth)
+### ✅ CloudStream repository browsing & plugin installation
+- Add any CloudStream repository URL (handles `https://`, `cloudstreamrepo://`, `https://cs.repo/` formats)
+- Auto-converts `raw.githubusercontent.com` URLs to jsdelivr CDN for faster downloads
+- Browse the plugin list from each repository
+- Install plugins with one tap — download + load + register immediately (no restart needed)
+- SHA-256 hash verification on download
+- Plugin updates automatically when the repo has a newer version
+- Plugin removal also unloads the provider and deletes the file
+- Default repositories seeded on first launch (official CloudStream extensions repo)
 
-3. **JS plugin scrapers** (JavaScript)
-   - Executed via Mozilla Rhino (works on Android + Desktop)
-   - Polyfill injection: `fetch`, `URL`, `URLSearchParams`, `atob`/`btoa`, `console`, `AbortController`, `TextEncoder`/`TextDecoder`, `Promise`, `require`
-   - Native bridges: `__native_fetch`, `__capture_result`, `__parse_url`
-   - 60-second timeout per plugin execution
-   - Returns JSON array of stream objects
+### ✅ Plugin loading (platform-aware)
+- **Android**: Loads `.cs3` files (ZIP with classes.dex + manifest.json) via `PathClassLoader`
+  - Sets file read-only for Android 14+ compatibility
+  - Reads manifest.json from inside the .cs3 file
+  - Reflects out the plugin class and instantiates it
+- **Desktop**: Loads `.jar` files via `URLClassLoader`
+  - Reads manifest.json from inside the .jar if present
+  - Falls back to scanning all classes for ones extending `BasePlugin` when manifest is missing
+  - CloudStream's `.jar` files don't include manifest.json, so the scanner finds the plugin class automatically
+- `SitePlugin.bestUrlForPlatform()` picks the right URL (.jar on Desktop, .cs3 on Android)
 
-### UI (CloudStream-inspired)
+### ✅ Built-in extractors (11 hosts)
+- StreamTape, MixDrop, Doodstream, Voe, Filemoon, JWPlayer, Upstream, Sendvid, Mp4Upload, Vidoza, M3U8 Manifest
+- Each handles a specific video-hosting site's URL pattern
 
-- **Home screen** with parallax hero + horizontal rails per provider
-- **Search** with debounced query + parallel provider search + history
-- **Details screen** with backdrop hero, cast row, episode list, recommendations
-- **Library** with tabs for bookmarks/watching/watched
-- **Downloads** for offline playback
-- **Settings** with 9 categories (general, UI, player, providers, extensions, updates, account, backup, about)
-- **Extensions** management screen for plugins + Stremio addons
-- **Player** with play/pause/seek, prev/next episode, source picker, subtitle picker
+### ✅ UI (Compose Multiplatform, CloudStream-inspired)
+- **Home**: Parallax hero, continue watching rail, bookmarks rail, per-provider rails with parallel fetching
+- **Search**: Debounced query (300ms), provider filter chips, per-provider result counts, recent searches history
+- **Details**: Backdrop hero with gradient overlay, plot/tags, episodes list, recommendations, "Sources" button for manual stream picker
+- **Library**: Tabs for Bookmarks / Watching / Watched
+- **Downloads**: Offline playback list
+- **Settings**: Extensions, General, UI, Player, Updates, About
+- **Extensions**: Repository management with expandable plugin lists, Stremio addon management, active providers list, installed plugin files list, recent activity log, init log viewer
+- **Player**: Play/pause/seek, source picker, subtitle picker, auto-hide controls
 - Dark-first Material 3 theme with indigo/violet accent
+- Shimmer loading placeholders on poster cards
+- Pressed scale animation + border highlight on cards
+- Snackbar feedback for all actions
 
-### Architecture
+## Architecture
 
 ```
 wavestream/
-├── app/                        # Android application module
-│   └── src/androidMain/
-│       ├── AndroidManifest.xml
-│       └── kotlin/com/wavestream/app/
-│           ├── MainActivity.kt       # Splash + edge-to-edge + setContent
-│           └── WaveStreamApp.kt      # Application class
-├── shared/                     # KMP shared module
+├── app/                                # Android application module
+│   └── src/androidMain/kotlin/com/wavestream/app/
+│       ├── MainActivity.kt              # Single-activity entry point
+│       └── WaveStreamApp.kt             # Application class
+├── shared/                             # KMP shared module (Android + Desktop)
 │   └── src/
-│       ├── commonMain/         # All shared code
-│       │   └── kotlin/com/wavestream/
-│       │       ├── App.kt            # Root composable + NavHost
-│       │       ├── api/              # MainAPI + ExtractorApi contracts
-│       │       │   ├── MainAPI.kt    # The provider contract (CloudStream-style)
-│       │       │   ├── Models.kt     # SearchResponse, LoadResponse, Episode, etc.
-│       │       │   ├── TvType.kt     # TvType enum, Qualities, etc.
-│       │       │   └── APIHolder.kt  # Singleton holder + APIRepository wrapper
-│       │       ├── core/             # Cross-cutting infrastructure
-│       │       │   ├── network/      # Ktor-based HTTP client (expect/actual)
-│       │       │   └── storage/      # PlatformStorage (SharedPreferences / java.util.prefs)
-│       │       ├── plugins/          # Plugin system
-│       │       │   ├── BasePlugin.kt          # Plugin abstract class
-│       │       │   ├── PluginManager.kt       # Loads .ws3/.jar files
-│       │       │   ├── repository/            # RepositoryManager (repo JSON)
-│       │       │   ├── stremio/               # StremioAddonClient
-│       │       │   ├── js/                    # JsPluginRuntime (Rhino)
-│       │       │   ├── extractors/            # StreamTape, MixDrop, Doodstream, M3U8
-│       │       │   └── m3u8/                  # M3u8Helper (HLS parser)
-│       │       ├── features/          # Feature modules
-│       │       │   ├── home/           # HomeScreen + repository
-│       │       │   ├── search/         # SearchScreen + debounced search
-│       │       │   ├── details/        # DetailsScreen + episode list
-│       │       │   ├── library/        # LibraryScreen (bookmarks/watched)
-│       │       │   ├── downloads/      # DownloadsScreen
-│       │       │   ├── player/         # PlayerScreen (expect/actual)
-│       │       │   ├── settings/       # SettingsScreen
-│       │       │   └── extensions/     # ExtensionsScreen
-│       │       └── ui/                 # UI components + theme
-│       │           ├── theme/          # WaveStreamTheme, Typography
-│       │           └── components/     # PosterCard, WaveBottomBar
-│       ├── androidMain/        # Android-specific impls
-│       │   └── kotlin/com/wavestream/
-│       │       ├── core/network/      # OkHttp engine
-│       │       ├── core/storage/      # AndroidStorage (SharedPreferences)
-│       │       ├── plugins/           # PathClassLoader-based plugin loading
-│       │       └── features/player/   # ExoPlayer via Media3
-│       └── desktopMain/        # Desktop (JVM) impls
-│           └── kotlin/com/wavestream/
-│               ├── main.kt            # Desktop entry point
-│               ├── core/network/      # Java engine
-│               ├── core/storage/      # DesktopStorage (java.util.prefs)
-│               ├── plugins/           # URLClassLoader-based plugin loading
-│               └── features/player/   # Desktop simulation (no ExoPlayer)
-├── settings.gradle.kts
-├── build.gradle.kts
-├── gradle.properties
-├── gradle/
-│   ├── wrapper/
-│   └── libs.versions.toml       # Version catalog
-├── gradlew, gradlew.bat
-└── run.sh                       # Desktop run script
+│       ├── commonMain/kotlin/com/wavestream/
+│       │   ├── App.kt                   # Root composable + NavHost
+│       │   ├── api/                     # MainAPI, ExtractorApi, APIHolder, Models
+│       │   ├── plugins/
+│       │   │   ├── BasePlugin.kt        # Plugin base class
+│       │   │   ├── PluginManager.kt     # Download/load/unload lifecycle
+│       │   │   ├── repository/          # RepositoryManager (CloudStream repos)
+│       │   │   ├── stremio/             # StremioAddonClient + StremioProviderAdapter
+│       │   │   ├── js/                  # JsPluginRuntime (Mozilla Rhino)
+│       │   │   ├── m3u8/                # M3U8 helper
+│       │   │   └── extractors/          # 11 built-in extractors
+│       │   ├── core/
+│       │   │   ├── WaveAppInit.kt       # Boot orchestrator (extractors → Stremio → plugins → repos)
+│       │   │   ├── network/             # Ktor NetworkClient + WebViewResolver
+│       │   │   ├── storage/             # PlatformStorage abstraction
+│       │   │   ├── auth/                # AccountManager + BiometricAuthenticator
+│       │   │   ├── cast/                # CastManager
+│       │   │   ├── sync/                # SyncAPI (Trakt/MAL etc.)
+│       │   │   ├── backup/              # BackupManager
+│       │   │   └── updater/             # InAppUpdater
+│       │   └── features/                # All UI screens
+│       │       ├── home/                # HomeScreen
+│       │       ├── search/              # SearchScreen + SearchHistoryRepository
+│       │       ├── details/             # DetailsScreen
+│       │       ├── player/              # PlayerScreen + gestures + subtitles + skip
+│       │       ├── library/             # LibraryScreen
+│       │       ├── downloads/           # DownloadsScreen + VideoDownloadManager
+│       │       ├── extensions/          # ExtensionsScreen (the one you'll spend time in)
+│       │       ├── settings/            # SettingsScreen
+│       │       ├── bookmarks/           # BookmarkRepository
+│       │       ├── watchprogress/       # WatchProgressRepository
+│       │       ├── subscriptions/       # SubscriptionRepository
+│       │       ├── notifications/       # EpisodeReleaseNotifications
+│       │       ├── trailer/             # InAppYouTubeExtractor
+│       │       ├── trakt/               # TraktApi
+│       │       ├── debrid/              # DebridProviders
+│       │       ├── tmdb/                # TmdbService
+│       │       └── tv/                  # TV layout (Android TV / Desktop)
+│       ├── androidMain/                 # Android-specific implementations
+│       └── desktopMain/                 # Desktop (JVM) implementations
+└── gradle/
+    └── libs.versions.toml               # Version catalog
 ```
 
-## Building
+## Tech Stack
 
-### Prerequisites
+- **Kotlin**: 2.1.20
+- **Gradle**: 9.4.1 (with foojay toolchain resolver for auto JDK download)
+- **AGP**: 8.8.1
+- **Compose Multiplatform**: 1.7.3
+- **Ktor**: 3.0.3 (OkHttp on Android, Java on Desktop)
+- **Coil**: 3.0.4 (image loading with shimmer placeholders)
+- **Media3 / ExoPlayer**: 1.5.1 (Android only — Desktop uses JavaFX media)
+- **Mozilla Rhino**: 1.7.15 (JS plugin runtime — pure JVM, works on both platforms)
+- **Kotlinx Serialization**: 1.7.3
+- **Kotlinx Coroutines**: 1.9.0
+- **Navigation Compose**: 2.9.0
 
-- JDK 17+ (for desktop)
-- Android SDK (for Android builds)
-- Gradle 9.4.1+ (wrapper included)
+## Build Instructions
 
-### Desktop (development/testing)
-
+### Desktop (JVM)
 ```bash
-./run.sh
+./gradlew :shared:desktopJar
+# Output: shared/build/libs/shared-desktop.jar
 ```
 
-This compiles the Kotlin sources and launches the desktop app via `java -cp`.
-
-### Android (production APK)
-
+### Android (requires Android SDK)
 ```bash
-# Set up Android SDK
-export ANDROID_HOME=/path/to/android/sdk
-echo "sdk.dir=$ANDROID_HOME" > local.properties
-
-# Build debug APK
-./gradlew :app:assembleStableDebug
-
-# Build release APK (needs signing config)
-./gradlew :app:assembleStableRelease
+./gradlew :app:assembleDebug
+# Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The APK will be at `app/build/outputs/apk/stable/debug/app-stable-debug.apk`.
+## How to use
 
-### Build variants
+1. **First launch**: The app auto-seeds the official CloudStream extensions repo and the Cinemeta Stremio addon. You'll see content on the Home screen within seconds.
+2. **Add more repositories**: Go to Settings → Extensions → Repositories → Add Repo. Paste any CloudStream repo URL.
+3. **Add Stremio addons**: Same screen, Stremio Addons → Add Addon. Paste a manifest URL. Find addons at https://stremio-addons.netlify.app/
+4. **Browse plugins in a repo**: Tap a repository row to expand it and see all available plugins. Tap Install to download and load.
+5. **Remove plugins**: Tap the trash icon on installed plugins, or remove the whole repository (also deletes its plugins).
+6. **Watch the activity log**: The Extensions screen shows recent plugin load/unload/fail events and init logs at the bottom.
 
-- `stable` — stable release
-- `prerelease` — prerelease with `.prerelease` applicationId suffix
+## Known Limitations
 
-## Writing Extensions
-
-### CloudStream-style provider (Kotlin)
-
-```kotlin
-import com.wavestream.api.*
-import com.wavestream.plugins.BasePlugin
-import com.wavestream.plugins.WavestreamPlugin
-
-class MyProvider : MainAPI() {
-    override var name = "MyProvider"
-    override var mainUrl = "https://example.com"
-    override val hasMainPage = true
-
-    override suspend fun search(query: String): List<SearchResponse>? {
-        // ... scrape your site or call your API
-        return listOf(
-            newMovieSearchResponse("Movie Title", "/movie/123") {
-                posterUrl = "https://example.com/poster.jpg"
-                year = 2024
-            }
-        )
-    }
-
-    override suspend fun load(url: String): LoadResponse? {
-        return newMovieLoadResponse("Movie Title", url, data = url) {
-            plot = "A description."
-            year = 2024
-        }
-    }
-
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
-        callback(newExtractorLink(
-            source = name,
-            name = "1080p",
-            url = "https://cdn.example.com/movie.m3u8",
-            type = ExtractorLinkType.M3U8,
-        ) {
-            this.quality = Qualities.P1080.value
-        })
-        return true
-    }
-}
-
-@WavestreamPlugin(name = "MyProvider", version = 1)
-class MyPlugin : BasePlugin() {
-    override fun load() {
-        registerMainAPI(MyProvider())
-    }
-}
-```
-
-Compile against `com.wavestream:shared` and package as a `.ws3` (zip with `manifest.json` + `classes.dex`).
-
-### Stremio addon (no code needed)
-
-Just add the manifest URL in the Extensions screen. The addon will be fetched and integrated automatically.
-
-### JS plugin scraper (JavaScript)
-
-```javascript
-module.exports.getStreams = function(tmdbId, mediaType, season, episode) {
-    var res = fetch("https://api.example.com/streams?tmdbId=" + tmdbId);
-    var data = res.json();
-    return data.streams;
-};
-
-module.exports.onSettings = function() {
-    return [{ id: "apiKey", label: "API Key", type: "text" }];
-};
-```
-
-The JS plugin has access to `fetch`, `URL`, `atob`/`btoa`, `console`, `cheerio` (planned), and `require` (planned). The runtime executes it via Mozilla Rhino in interpreted mode (no JIT, works on Android).
+- **CloudStream .cs3 plugins** are Android-only (contain DEX bytecode). Desktop requires the `.jar` variant, which CloudStream's official repo provides.
+- **JS plugin runtime** is implemented but not yet exposed in the UI. The `JsPluginRuntime` class is ready to use programmatically.
+- **Torrent streams** from Stremio addons (infoHash) are not yet supported — requires a torrent engine.
+- **Desktop player** uses a basic JavaFX media player. For full codec support on Desktop, consider installing a media codec pack.
 
 ## License
 
-MIT — see LICENSE file.
+MIT — see [LICENSE](LICENSE).
 
 ## Credits
 
-- Architecture inspired by [CloudStream](https://github.com/recloudstream/cloudstream) (extension system)
-- Stremio addon integration inspired by [NuvioMobile](https://github.com/NuvioMedia/NuvioMobile)
-- Built with Kotlin Multiplatform, Compose Multiplatform, Ktor, Media3, Coil, Rhino
+- [CloudStream](https://github.com/recloudstream/cloudstream) — Original plugin/repository/extractor infrastructure design
+- [Stremio](https://www.stremio.com/) — Addon protocol specification
+- [Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/) — UI framework

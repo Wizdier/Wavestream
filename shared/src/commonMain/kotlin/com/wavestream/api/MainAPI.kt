@@ -101,7 +101,9 @@ abstract class MainAPI {
 
     /** Fix a relative URL against this provider's mainUrl. */
     fun fixUrl(url: String): String {
-        if (url.startsWith("http") || url.startsWith("{\"") || url.startsWith("[")) return url
+        // Pass through URLs that are already absolute or use a non-HTTP scheme
+        // (e.g. "stremio:movie:tt1234567" used by StremioProviderAdapter)
+        if (url.startsWith("http") || url.startsWith("{\"") || url.startsWith("[") || url.startsWith("stremio:")) return url
         if (url.isEmpty()) return ""
         if (url.startsWith("//")) return "https:$url"
         if (url.startsWith('/')) return mainUrl + url
