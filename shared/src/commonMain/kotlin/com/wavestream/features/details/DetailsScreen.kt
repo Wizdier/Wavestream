@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,28 +23,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.wavestream.api.*
+import com.wavestream.features.bookmarks.BookmarkRepository
 import com.wavestream.ui.components.PosterCard
+import com.wavestream.ui.components.ErrorState
+import com.wavestream.ui.components.LoadingIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Details screen — mirrors CloudStream's ResultFragment.
- *
- * Layout:
- *   - Backdrop hero with poster, title, year, rating, plot
- *   - Action buttons: Play, Trailer, Bookmark, Favorite, Subscribe
- *   - Cast row (horizontal)
- *   - Episode list (for TV series/anime)
- *   - Recommendations row
- *
- * Data flow:
- *   - User taps a search result → navigate to details/{apiName}/{url}
- *   - DetailsScreen calls APIRepository(api).load(url) → LoadResponse
- *   - Displays metadata, episodes, etc.
- *   - When user taps an episode → calls loadLinks() → list of ExtractorLinks
- *   - User picks a link (or auto-selects best) → navigate to player/{source}/{url}
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailsScreen(
@@ -55,40 +43,69 @@ fun DetailsScreen(
     var loadResponse by remember { mutableStateOf<LoadResponse?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var selectedEpisode by remember { mutableStateOf<Episode?>(null) }
+    var isBookmarked by remember { mutableStateOf(false) }
+    var isLoadingLinks by remember { mutableStateOf(false) }
     var availableLinks by remember { mutableStateOf<List<ExtractorLink>>(emptyList()) }
     var showLinkPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(apiName, url) {
-        scope.launch {
-            isLoading = true
-            error = null
-            try {
-                val api = APIHolder.getApiFromName(apiName)
-                if (api == null) {
-                    error = "Provider $apiName not found"
-                } else {
-                    val repo = APIRepository(api)
-                    when (val res = repo.load(url)) {
-                        is Resource.Success -> loadResponse = res.value
-                        is Resource.Failure -> error = res.error.message ?: "Failed to load"
-                        is Resource.Loading -> {}
+        isLoading = true
+        error = null
+        try {
+            val api = APIHolder.getApiFromName(apiName)
+            if (api == null) {
+                error = "Provider '$apiName' not found. Make sure the extension is installed and enabled."
+            } else {
+                val repo = APIRepository(api)
+                when (val res = repo.load(url)) {
+                    is Resource.Success -> {
+                        loadResponse = res.value
+                        // Check bookmark status
+                        isBookmarked = BookmarkRepository.isBookmarked(apiName, url)
                     }
+                    is Resource.Failure -> error = res.error.message ?: "Failed to load"
+                    is Resource.Loading -> {}
                 }
-            } catch (e: Throwable) {
-                error = e.message
             }
-            isLoading = false
+        } catch (e: Throwable) {
+            error = e.message ?: "Unknown error"
         }
+        isLoading = false
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(loadResponse?.name ?: "Loading...") },
+                title = { Text(loadResponse?.name ?: "Loading...", maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (loadResponse != null) {
+                        IconButton(onClick = {
+                            val resp = loadResponse
+                            if (resp != null) {
+                                isBookmarked = BookmarkRepository.toggle(
+                                    object : SearchResponse {
+                                        override val name = resp.name
+                                        override val url = resp.url
+                                        override val apiName = apiName
+                                        override var type: TvType? = resp.type
+                                        override var posterUrl: String? = resp.posterUrl
+                                        override var posterHeaders: Map<String, String>? = null
+                                        override var id: Int? = null
+                                        override var quality: SearchQuality? = null
+                                    },
+                                )
+                            }
+                        }) {
+                            Icon(
+                                if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                contentDescription = "Bookmark",
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -100,17 +117,13 @@ fun DetailsScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    LoadingIndicator()
                 }
                 error != null -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("Error: $error", color = MaterialTheme.colorScheme.error)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = onNavigateBack) { Text("Go back") }
-                    }
+                    ErrorState(
+                        message = error!!,
+                        onRetry = { onNavigateBack() },
+                    )
                 }
                 loadResponse != null -> {
                     val resp = loadResponse ?: return@Box
@@ -118,84 +131,108 @@ fun DetailsScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 32.dp),
                     ) {
-                        // Hero
                         item { DetailsHero(resp) }
 
-                        // Action buttons
                         item {
                             DetailsActions(
                                 response = resp,
+                                isLoadingLinks = isLoadingLinks,
                                 onPlay = {
-                                    scope.launch { playItem(apiName, resp, null, onNavigateToPlayer) }
+                                    scope.launch {
+                                        if (resp.type.isMovieType()) {
+                                            // Movie: load links and auto-play best
+                                            isLoadingLinks = true
+                                            val links = loadLinksForItem(apiName, resp, null)
+                                            isLoadingLinks = false
+                                            if (links.isNotEmpty()) {
+                                                val best = links.maxByOrNull { it.quality } ?: links.first()
+                                                onNavigateToPlayer(best.url, best.source)
+                                            }
+                                        } else {
+                                            // Series: load links for first episode
+                                            val firstEp = when (resp) {
+                                                is TvSeriesLoadResponse -> resp.episodes.firstOrNull()
+                                                is AnimeLoadResponse -> resp.episodes.values.firstOrNull()?.firstOrNull()
+                                                else -> null
+                                            }
+                                            if (firstEp != null) {
+                                                isLoadingLinks = true
+                                                val links = loadLinksForItem(apiName, resp, firstEp)
+                                                isLoadingLinks = false
+                                                if (links.isNotEmpty()) {
+                                                    val best = links.maxByOrNull { it.quality } ?: links.first()
+                                                    onNavigateToPlayer(best.url, best.source)
+                                                }
+                                            }
+                                        }
+                                    }
                                 },
-                                onTrailer = { /* TODO: trailer player */ },
                             )
                         }
 
-                        // Metadata
                         item { DetailsMetadata(resp) }
 
-                        // Cast
-                        resp.actors?.takeIf { it.isNotEmpty() }?.let { actors ->
-                            item {
-                                Text(
-                                    "Cast",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(16.dp),
-                                )
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    items(actors) { actorData ->
-                                        CastCard(actorData)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Episodes (for series)
+                        // Episodes
                         when (resp) {
                             is TvSeriesLoadResponse -> {
-                                item {
-                                    Text(
-                                        "Episodes (${resp.episodes.size})",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(16.dp),
-                                    )
-                                }
-                                items(resp.episodes.withIndex().toList()) { (idx, ep) ->
-                                    EpisodeRow(
-                                        episode = ep,
-                                        onClick = {
-                                            scope.launch {
-                                                playItem(apiName, resp, ep, onNavigateToPlayer)
-                                            }
-                                        },
-                                    )
+                                if (resp.episodes.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            "Episodes (${resp.episodes.size})",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(16.dp),
+                                        )
+                                    }
+                                    items(resp.episodes.withIndex().toList()) { (idx, ep) ->
+                                        EpisodeRow(
+                                            episode = ep,
+                                            onClick = {
+                                                scope.launch {
+                                                    isLoadingLinks = true
+                                                    val links = loadLinksForItem(apiName, resp, ep)
+                                                    isLoadingLinks = false
+                                                    if (links.size > 1) {
+                                                        availableLinks = links
+                                                        showLinkPicker = true
+                                                    } else if (links.size == 1) {
+                                                        onNavigateToPlayer(links[0].url, links[0].source)
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
                             }
                             is AnimeLoadResponse -> {
                                 val allEps = resp.episodes.values.flatten().sortedBy { it.episode }
-                                item {
-                                    Text(
-                                        "Episodes (${allEps.size})",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(16.dp),
-                                    )
-                                }
-                                items(allEps.withIndex().toList()) { (idx, ep) ->
-                                    EpisodeRow(
-                                        episode = ep,
-                                        onClick = {
-                                            scope.launch {
-                                                playItem(apiName, resp, ep, onNavigateToPlayer)
-                                            }
-                                        },
-                                    )
+                                if (allEps.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            "Episodes (${allEps.size})",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(16.dp),
+                                        )
+                                    }
+                                    items(allEps.withIndex().toList()) { (idx, ep) ->
+                                        EpisodeRow(
+                                            episode = ep,
+                                            onClick = {
+                                                scope.launch {
+                                                    isLoadingLinks = true
+                                                    val links = loadLinksForItem(apiName, resp, ep)
+                                                    isLoadingLinks = false
+                                                    if (links.size > 1) {
+                                                        availableLinks = links
+                                                        showLinkPicker = true
+                                                    } else if (links.size == 1) {
+                                                        onNavigateToPlayer(links[0].url, links[0].source)
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
                             }
                             else -> {}
@@ -215,10 +252,7 @@ fun DetailsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     items(recs) { rec ->
-                                        PosterCard(
-                                            item = rec,
-                                            onClick = { /* navigate to details */ },
-                                        )
+                                        PosterCard(item = rec, onClick = {})
                                     }
                                 }
                             }
@@ -228,105 +262,97 @@ fun DetailsScreen(
             }
         }
     }
+
+    // Link picker dialog
+    if (showLinkPicker && availableLinks.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showLinkPicker = false },
+            title = { Text("Choose a stream (${availableLinks.size})") },
+            text = {
+                Column {
+                    availableLinks.forEach { link ->
+                        TextButton(
+                            onClick = {
+                                showLinkPicker = false
+                                onNavigateToPlayer(link.url, link.source)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    link.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    "${Qualities.getStringByInt(link.quality)} - ${link.source}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLinkPicker = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable
 private fun DetailsHero(response: LoadResponse) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(400.dp),
-    ) {
-        // Backdrop
+    Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
         val backdrop = response.backgroundPosterUrl ?: response.posterUrl
         if (backdrop != null) {
-            AsyncImage(
-                model = backdrop,
-                contentDescription = response.name,
-                modifier = Modifier.fillMaxSize(),
-            )
+            AsyncImage(model = backdrop, contentDescription = response.name, modifier = Modifier.fillMaxSize())
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
         }
-
-        // Gradient overlay
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.3f),
-                            Color.Transparent,
-                            MaterialTheme.colorScheme.background,
-                        ),
-                    ),
+            modifier = Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    colors = listOf(Color.Black.copy(alpha = 0.3f), Color.Transparent, MaterialTheme.colorScheme.background),
                 ),
-            )
-
-        // Title + meta
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp),
-        ) {
-            Text(
-                text = response.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            ),
+        )
+        Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            Text(response.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             Spacer(modifier = Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                response.year?.let { Text("${it}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                response.score?.let { Text("★ ${"%.1f".format(it)}", color = MaterialTheme.colorScheme.secondary) }
-                response.duration?.let { Text("${it} min", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                response.contentRating?.let {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = it,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
+                response.year?.let { Text("$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                response.score?.let { Text("* ${"%.1f".format(it)}", color = MaterialTheme.colorScheme.secondary) }
+                response.duration?.let { Text("$it min", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }
 }
 
 @Composable
-private fun DetailsActions(
-    response: LoadResponse,
-    onPlay: () -> Unit,
-    onTrailer: () -> Unit,
-) {
+private fun DetailsActions(response: LoadResponse, isLoadingLinks: Boolean, onPlay: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Button(
             onClick = onPlay,
             modifier = Modifier.weight(1f),
+            enabled = !isLoadingLinks,
         ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(if (response.type.isMovieType()) "Play" else "Play First Episode")
-        }
-        OutlinedButton(onClick = onTrailer) {
-            Text("Trailer")
+            if (isLoadingLinks) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Loading streams...")
+            } else {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (response.type.isMovieType()) "Play" else "Play First Episode")
+            }
         }
     }
 }
@@ -335,22 +361,13 @@ private fun DetailsActions(
 private fun DetailsMetadata(response: LoadResponse) {
     Column(modifier = Modifier.padding(16.dp)) {
         response.plot?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.height(8.dp))
         }
         response.tags?.takeIf { it.isNotEmpty() }?.let { tags ->
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 tags.forEach { tag ->
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(tag) },
-                    )
+                    AssistChip(onClick = {}, label = { Text(tag) })
                 }
             }
         }
@@ -358,47 +375,7 @@ private fun DetailsMetadata(response: LoadResponse) {
 }
 
 @Composable
-private fun CastCard(actor: ActorData) {
-    Column(
-        modifier = Modifier.width(80.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(36.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            actor.actor.image?.let {
-                AsyncImage(
-                    model = it,
-                    contentDescription = actor.actor.name,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = actor.actor.name,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 2,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        actor.roleString?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun EpisodeRow(
-    episode: Episode,
-    onClick: () -> Unit,
-) {
+private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -407,23 +384,12 @@ private fun EpisodeRow(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Episode thumbnail
+        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .size(120.dp, 68.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.size(120.dp, 68.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 episode.posterUrl?.let {
-                    AsyncImage(
-                        model = it,
-                        contentDescription = episode.name,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    AsyncImage(model = it, contentDescription = episode.name, modifier = Modifier.fillMaxSize())
                 }
                 Text(
                     text = "S${episode.season ?: 1} E${episode.episode ?: 0}",
@@ -442,28 +408,19 @@ private fun EpisodeRow(
                 )
                 episode.description?.let {
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                    )
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
             }
         }
     }
 }
 
-/**
- * Play an item — calls loadLinks on the provider, picks the best link, navigates to player.
- */
-private suspend fun playItem(
+private suspend fun loadLinksForItem(
     apiName: String,
     response: LoadResponse,
     episode: Episode?,
-    onNavigateToPlayer: (url: String, source: String) -> Unit,
-) {
-    val api = APIHolder.getApiFromName(apiName) ?: return
+): List<ExtractorLink> = withContext(Dispatchers.Default) {
+    val api = APIHolder.getApiFromName(apiName) ?: return@withContext emptyList()
     val repo = APIRepository(api)
 
     val data = when (response) {
@@ -476,10 +433,5 @@ private suspend fun playItem(
     val links = mutableListOf<ExtractorLink>()
     val subs = mutableListOf<SubtitleFile>()
     repo.loadLinks(data, isCasting = false, { subs.add(it) }, { links.add(it) })
-
-    if (links.isNotEmpty()) {
-        // Pick the highest-quality link
-        val best = links.maxByOrNull { it.quality } ?: links.first()
-        onNavigateToPlayer(best.url, best.source)
-    }
+    links
 }

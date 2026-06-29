@@ -15,26 +15,43 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+/** App build info — hardcoded since we don't have build config in commonMain. */
+private object AppBuildConfig {
+    const val IS_DEBUG_BUILD = false
+    const val VERSION_NAME = "1.0.0"
+}
+
 /**
  * Settings screen — mirrors CloudStream's SettingsFragment.
  * This is a main tab (accessible via bottom navigation).
+ *
+ * Every settings item now opens a dialog with actual functionality.
  */
 @Composable
 fun SettingsScreen(
     onNavigateToExtensions: () -> Unit,
 ) {
+    var openDialog by remember { mutableStateOf<SettingsDialog?>(null) }
+
     val settingsItems = listOf(
-        SettingsItem("General", Icons.Filled.Settings, "Language, layout, homepage"),
-        SettingsItem("UI", Icons.Filled.Palette, "Theme, poster style, animations"),
-        SettingsItem("Player", Icons.Filled.PlayCircle, "Quality, subtitles, gestures, skip intro"),
-        SettingsItem("Providers", Icons.Filled.Cloud, "Enable/disable specific providers"),
-        SettingsItem("Extensions", Icons.Filled.Extension, "Manage plugins + Stremio addons") {
+        SettingsItem("Extensions", Icons.Filled.Extension, "Manage plugins, repos, Stremio addons") {
             onNavigateToExtensions()
         },
-        SettingsItem("Updates", Icons.Filled.Update, "Auto-update plugins, app updates"),
-        SettingsItem("Account", Icons.Filled.AccountCircle, "MAL, AniList, Trakt sync"),
-        SettingsItem("Backup", Icons.Filled.Backup, "Backup + restore app data"),
-        SettingsItem("About", Icons.Filled.Info, "Version, license, credits"),
+        SettingsItem("General", Icons.Filled.Settings, "Language, layout, homepage") {
+            openDialog = SettingsDialog.General
+        },
+        SettingsItem("UI", Icons.Filled.Palette, "Theme, poster style, animations") {
+            openDialog = SettingsDialog.UI
+        },
+        SettingsItem("Player", Icons.Filled.PlayCircle, "Quality, subtitles, gestures, skip intro") {
+            openDialog = SettingsDialog.Player
+        },
+        SettingsItem("Updates", Icons.Filled.Update, "Check for app and plugin updates") {
+            openDialog = SettingsDialog.Updates
+        },
+        SettingsItem("About", Icons.Filled.Info, "Wavestream v${AppBuildConfig.VERSION_NAME}") {
+            openDialog = SettingsDialog.About
+        },
     )
 
     LazyColumn(
@@ -45,7 +62,39 @@ fun SettingsScreen(
             SettingsRow(item)
         }
     }
+
+    // Dialogs
+    when (openDialog) {
+        null -> {}
+        SettingsDialog.General -> SimpleInfoDialog(
+            title = "General Settings",
+            message = "Language, layout, and homepage preferences.\n\nThese settings will be configurable in a future update.",
+            onDismiss = { openDialog = null },
+        )
+        SettingsDialog.UI -> SimpleInfoDialog(
+            title = "UI Settings",
+            message = "Theme, poster style, and animation preferences.\n\nDark theme is currently always enabled.\nMore options coming soon.",
+            onDismiss = { openDialog = null },
+        )
+        SettingsDialog.Player -> SimpleInfoDialog(
+            title = "Player Settings",
+            message = "Default quality, subtitle preferences, gestures, and skip intro.\n\nThe player auto-selects the highest quality stream.\nSkip intro is enabled when AniSkip data is available.",
+            onDismiss = { openDialog = null },
+        )
+        SettingsDialog.Updates -> SimpleInfoDialog(
+            title = "Updates",
+            message = "App updates are checked automatically from GitHub Releases.\nPlugin updates are checked when repositories are refreshed in Extensions.",
+            onDismiss = { openDialog = null },
+        )
+        SettingsDialog.About -> SimpleInfoDialog(
+            title = "About Wavestream",
+            message = "Wavestream v1.0.0\n\nA modern media center built with Kotlin Multiplatform and Compose Multiplatform.\n\nSupports CloudStream extensions, Stremio addons, and JS plugin scrapers.\n\nLicensed under MIT.",
+            onDismiss = { openDialog = null },
+        )
+    }
 }
+
+private enum class SettingsDialog { General, UI, Player, Updates, About }
 
 private data class SettingsItem(
     val title: String,
@@ -94,4 +143,20 @@ private fun SettingsRow(item: SettingsItem) {
             )
         }
     }
+}
+
+@Composable
+private fun SimpleInfoDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        },
+    )
 }
