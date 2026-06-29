@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,18 +17,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Settings screen — mirrors CloudStream's SettingsFragment.
- *
- * Categories:
- *   - General: language, layout, homepage, etc.
- *   - UI: theme, poster style, animations
- *   - Player: default quality, subtitles, gestures, skip intro
- *   - Providers: enable/disable specific providers
- *   - Extensions: manage plugins + Stremio addons
- *   - Updates: auto-update plugins, app updates
- *   - Account: sync providers (MAL, AniList, Trakt)
- *   - About: version, license
+ * This is a main tab (accessible via bottom navigation).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateToExtensions: () -> Unit,
@@ -48,23 +37,12 @@ fun SettingsScreen(
         SettingsItem("About", Icons.Filled.Info, "Version, license, credits"),
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(vertical = 8.dp),
-        ) {
-            items(settingsItems) { item ->
-                SettingsRow(item)
-            }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 8.dp),
+    ) {
+        items(settingsItems) { item ->
+            SettingsRow(item)
         }
     }
 }

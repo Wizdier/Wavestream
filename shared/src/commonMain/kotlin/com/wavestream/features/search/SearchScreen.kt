@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -23,6 +22,7 @@ import com.wavestream.api.APIRepository
 import com.wavestream.api.Resource
 import com.wavestream.api.SearchResponse
 import com.wavestream.ui.components.PosterCard
+import com.wavestream.ui.components.EmptyState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -33,19 +33,12 @@ import kotlinx.coroutines.withContext
 
 /**
  * Search screen — mirrors CloudStream's SearchFragment.
- *
- * Features:
- *   - Search across all registered MainAPI providers in parallel
- *   - Debounced query (300ms)
- *   - Search history (persisted via DataStore)
- *   - Suggestions (calls quickSearch on each provider)
- *   - Results displayed in a responsive grid
+ * This is a main tab (accessible via bottom navigation).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     onNavigateToDetails: (apiName: String, url: String) -> Unit,
-    onNavigateBack: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SearchResponse>>(emptyList()) }
@@ -53,11 +46,6 @@ fun SearchScreen(
     var searchJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
 
     // Debounced search
     LaunchedEffect(query) {
@@ -68,90 +56,72 @@ fun SearchScreen(
             return@LaunchedEffect
         }
         searchJob = scope.launch {
-            delay(300)  // debounce
+            delay(300)
             isLoading = true
             results = performSearch(query)
             isLoading = false
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Search") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        },
-    ) { padding ->
-        Column(
+    Column(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        // Search bar at top — no Scaffold/TopAppBar since this is a main tab
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            // Search bar
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .focusRequester(focusRequester),
-                placeholder = { Text("Search movies, shows, anime...") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Clear")
-                        }
+                .fillMaxWidth()
+                .padding(16.dp)
+                .focusRequester(focusRequester),
+            placeholder = { Text("Search movies, shows, anime...") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Filled.Clear, contentDescription = "Clear")
                     }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                singleLine = true,
-                shape = MaterialTheme.shapes.large,
-            )
+                }
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            singleLine = true,
+            shape = MaterialTheme.shapes.large,
+        )
 
-            // Results
-            Box(modifier = Modifier.fillMaxSize()) {
-                when {
-                    isLoading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center),
-                        )
-                    }
-                    query.isBlank() -> {
-                        Text(
-                            text = "Start typing to search across all providers",
-                            modifier = Modifier.align(Alignment.Center),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    results.isEmpty() -> {
-                        Text(
-                            text = "No results found for \"$query\"",
-                            modifier = Modifier.align(Alignment.Center),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    else -> {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 120.dp),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(results, key = { it.url + it.apiName }) { item ->
-                                PosterCard(
-                                    item = item,
-                                    onClick = { onNavigateToDetails(item.apiName, item.url) },
-                                )
-                            }
+        // Results
+        Box(modifier = Modifier.fillMaxSize()) {
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+                query.isBlank() -> {
+                    EmptyState(
+                        title = "Search",
+                        message = "Start typing to search across all providers.",
+                        icon = "🔍",
+                    )
+                }
+                results.isEmpty() -> {
+                    EmptyState(
+                        title = "No results",
+                        message = "No results found for \"$query\". Try a different search term.",
+                        icon = "📭",
+                    )
+                }
+                else -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 120.dp),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(results, key = { it.url + it.apiName }) { item ->
+                            PosterCard(
+                                item = item,
+                                onClick = { onNavigateToDetails(item.apiName, item.url) },
+                            )
                         }
                     }
                 }
@@ -160,9 +130,6 @@ fun SearchScreen(
     }
 }
 
-/**
- * Perform search across all registered providers in parallel.
- */
 private suspend fun performSearch(query: String): List<SearchResponse> = withContext(Dispatchers.Default) {
     val providers = APIHolder.apis.toList()
     val results = mutableListOf<SearchResponse>()

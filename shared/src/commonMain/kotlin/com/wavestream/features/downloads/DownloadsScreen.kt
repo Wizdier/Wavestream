@@ -1,6 +1,7 @@
 package com.wavestream.features.downloads
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,72 +18,48 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wavestream.api.TvType
+import com.wavestream.ui.components.EmptyState
 
 /**
  * Downloads screen — mirrors CloudStream's DownloadFragment.
- *
- * Shows downloaded episodes/movies with:
- *   - Thumbnail
- *   - Title + episode info
- *   - File size + duration
- *   - Play button
- *
- * Real implementation would call VideoDownloadManager.getDownloadedItems().
+ * This is a main tab (accessible via bottom navigation).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadsScreen(
     onNavigateToPlayer: (url: String) -> Unit,
 ) {
-    // TODO: load from VideoDownloadManager
-    val downloads = remember { mutableStateListOf<DownloadedItem>() }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Downloads", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+    // Load from VideoDownloadManager
+    val downloadState by VideoDownloadManager.downloads.collectAsState()
+    val downloads = downloadState.values
+        .filter { it.status is DownloadStatus.Completed }
+        .map { task ->
+            DownloadedItem(
+                id = task.id,
+                title = task.title,
+                subtitle = task.subtitle,
+                filePath = task.outputFile.absolutePath,
+                sizeText = formatBytes(task.outputFile.length()),
+                type = task.type,
             )
-        },
-    ) { padding ->
-        if (downloads.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        }
+
+    if (downloads.isEmpty()) {
+        EmptyState(
+            title = "No downloads yet",
+            message = "Download episodes to watch offline.",
+            icon = "📥",
+        )
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(downloads, key = { it.id }) { item ->
+                DownloadRow(
+                    item = item,
+                    onClick = { onNavigateToPlayer(item.filePath) },
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "No downloads yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "Download episodes to watch offline.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(downloads, key = { it.id }) { item ->
-                    DownloadRow(
-                        item = item,
-                        onClick = { onNavigateToPlayer(item.filePath) },
-                    )
-                }
             }
         }
     }
@@ -94,7 +71,9 @@ private fun DownloadRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
@@ -107,7 +86,14 @@ private fun DownloadRow(
                     .size(120.dp, 68.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Download,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -132,6 +118,18 @@ private fun DownloadRow(
                 Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
             }
         }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val kb = bytes / 1024.0
+    val mb = kb / 1024.0
+    val gb = mb / 1024.0
+    return when {
+        gb >= 1 -> "%.1f GB".format(gb)
+        mb >= 1 -> "%.1f MB".format(mb)
+        kb >= 1 -> "%.1f KB".format(kb)
+        else -> "$bytes B"
     }
 }
 
