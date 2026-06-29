@@ -14,17 +14,10 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
-/**
- * Bottom navigation bar — mirrors CloudStream's BottomNavigationView setup.
- *
- * Five tabs: Home, Search, Library, Downloads, Settings.
- * Uses Material 3 NavigationBar with selected/unselected icon variants.
- */
 data class WaveNavItem(
     val route: String,
     val label: String,

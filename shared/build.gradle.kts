@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Use a JDK 17 toolchain — Gradle's foojay resolver auto-downloads it if missing
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
@@ -16,24 +15,32 @@ java {
 kotlin {
     androidTarget()
 
-    jvm("desktop") {
-        compilerOptions {
-            freeCompilerArgs.add("-Xjvm-default=all")
-        }
+    jvm("desktop")
+
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-Xjvm-default=all",
+            "-Xexpect-actual-classes",
+        )
     }
 
     sourceSets {
         all {
             languageSettings {
-                optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
                 optIn("androidx.compose.material3.ExperimentalMaterial3Api")
                 optIn("androidx.compose.foundation.ExperimentalFoundationApi")
+                optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
                 optIn("kotlinx.serialization.ExperimentalSerializationApi")
+                optIn("com.lagradost.cloudstream3.InternalAPI")
+                optIn("com.lagradost.cloudstream3.Prerelease")
             }
         }
 
         val commonMain by getting {
             dependencies {
+                // CloudStream library (provides MainAPI, plugins, extractors, etc.)
+                implementation(project(":library"))
+
                 // Compose
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -57,9 +64,6 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.serialization.json)
 
-                // JavaScript engine (Rhino — pure JVM, works on Android + Desktop)
-                implementation(libs.rhino)
-
                 // Lifecycle + Navigation
                 implementation(libs.androidx.lifecycle.viewmodel.compose)
                 implementation(libs.androidx.lifecycle.runtime.compose)
@@ -74,13 +78,9 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.work.runtime)
                 implementation(libs.androidx.biometric)
+                implementation(libs.androidx.fragment)
+                implementation(libs.androidx.preference)
                 implementation(libs.material)
-
-                // Fragment (for BiometricAuthenticator — FragmentActivity)
-                implementation("androidx.fragment:fragment-ktx:1.6.2")
-
-                // Preference (for SharedPreferences)
-                implementation("androidx.preference:preference-ktx:1.2.1")
 
                 // Media3 / ExoPlayer
                 implementation(libs.androidx.media3.exoplayer)
@@ -103,18 +103,11 @@ kotlin {
                 implementation(compose.desktop.currentOs)
             }
         }
-
-        val commonTest by getting {
-            dependencies {
-                implementation(libs.kotlin.test)
-                implementation(libs.junit)
-            }
-        }
     }
 }
 
 android {
-    namespace = "com.wavestream.shared"
+    namespace = "com.wavestream.ui"
     compileSdk = 35
 
     defaultConfig {

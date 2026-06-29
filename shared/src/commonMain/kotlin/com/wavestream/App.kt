@@ -11,20 +11,19 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.wavestream.features.details.DetailsScreen
-import com.wavestream.features.downloads.DownloadsScreen
-import com.wavestream.features.extensions.ExtensionsScreen
-import com.wavestream.features.home.HomeScreen
-import com.wavestream.features.library.LibraryScreen
-import com.wavestream.features.player.PlayerScreen
-import com.wavestream.features.search.SearchScreen
-import com.wavestream.features.settings.SettingsScreen
+import androidx.savedstate.read
 import com.wavestream.ui.components.WaveBottomBar
 import com.wavestream.ui.theme.WaveStreamTheme
-import androidx.savedstate.read
+import com.wavestream.ui.screens.details.DetailsScreen
+import com.wavestream.ui.screens.downloads.DownloadsScreen
+import com.wavestream.ui.screens.extensions.ExtensionsScreen
+import com.wavestream.ui.screens.home.HomeScreen
+import com.wavestream.ui.screens.library.LibraryScreen
+import com.wavestream.ui.screens.player.PlayerScreen
+import com.wavestream.ui.screens.search.SearchScreen
+import com.wavestream.ui.screens.settings.SettingsScreen
 
 private fun String.urlEncode(): String {
-    // Use URL-encoded form to handle special characters (colons, slashes, etc.)
     val sb = StringBuilder()
     for (byte in toByteArray()) {
         val v = byte.toInt() and 0xFF
@@ -58,16 +57,8 @@ private fun String.urlDecode(): String {
     return sb.toString()
 }
 
-/** Routes that show the bottom navigation bar. */
 private val mainRoutes = setOf("home", "search", "library", "downloads", "settings")
 
-/**
- * Root composable for the Wavestream app.
- *
- * Navigation structure:
- *   - 5 main tabs with bottom navigation: Home, Search, Library, Downloads, Settings
- *   - Detail routes (no bottom bar): details/{apiName}/{url}, player/{source}/{url}, extensions
- */
 @Composable
 fun App() {
     WaveStreamTheme(useDarkTheme = true) {
@@ -83,7 +74,6 @@ fun App() {
                         currentRoute = currentRoute,
                         onNavigate = { route ->
                             navController.navigate(route) {
-                                // Pop up to start destination to avoid stacking
                                 popUpTo(navController.graph.startDestinationId) {
                                     saveState = true
                                 }
@@ -106,14 +96,11 @@ fun App() {
                 composable("home") {
                     HomeScreen(
                         onNavigateToDetails = { apiName, url ->
-                            val encoded = url.urlEncode()
-                            navController.navigate("details/${apiName.urlEncode()}/$encoded")
+                            navController.navigate("details/${apiName.urlEncode()}/${url.urlEncode()}")
                         },
                         onNavigateToSearch = {
                             navController.navigate("search") {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -124,8 +111,7 @@ fun App() {
                 composable("search") {
                     SearchScreen(
                         onNavigateToDetails = { apiName, url ->
-                            val encoded = url.urlEncode()
-                            navController.navigate("details/${apiName.urlEncode()}/$encoded")
+                            navController.navigate("details/${apiName.urlEncode()}/${url.urlEncode()}")
                         },
                     )
                 }
@@ -133,8 +119,7 @@ fun App() {
                 composable("library") {
                     LibraryScreen(
                         onNavigateToDetails = { apiName, url ->
-                            val encoded = url.urlEncode()
-                            navController.navigate("details/${apiName.urlEncode()}/$encoded")
+                            navController.navigate("details/${apiName.urlEncode()}/${url.urlEncode()}")
                         },
                     )
                 }
@@ -142,8 +127,7 @@ fun App() {
                 composable("downloads") {
                     DownloadsScreen(
                         onNavigateToPlayer = { url ->
-                            val encoded = url.urlEncode()
-                            navController.navigate("player/local/$encoded")
+                            navController.navigate("player/local/${url.urlEncode()}")
                         },
                     )
                 }
@@ -173,14 +157,11 @@ fun App() {
                         apiName = apiName,
                         url = url,
                         onNavigateToPlayer = { linkUrl, source ->
-                            val encoded = linkUrl.urlEncode()
-                            val srcEncoded = source.urlEncode()
-                            navController.navigate("player/$srcEncoded/$encoded")
+                            navController.navigate("player/${source.urlEncode()}/${linkUrl.urlEncode()}")
                         },
                         onNavigateBack = { navController.popBackStack() },
                         onNavigateToDetails = { detailApiName, detailUrl ->
-                            val encoded = detailUrl.urlEncode()
-                            navController.navigate("details/${detailApiName.urlEncode()}/$encoded")
+                            navController.navigate("details/${detailApiName.urlEncode()}/${detailUrl.urlEncode()}")
                         },
                     )
                 }
@@ -204,4 +185,3 @@ fun App() {
         }
     }
 }
-

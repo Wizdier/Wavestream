@@ -1,24 +1,19 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
 }
 
 android {
     namespace = "com.wavestream.app"
     compileSdk = 35
-
-    sourceSets {
-        getByName("main") {
-            manifest.srcFile("src/androidMain/AndroidManifest.xml")
-            res.srcDirs("src/androidMain/res")
-            java.srcDirs("src/androidMain/kotlin")
-        }
-    }
 
     defaultConfig {
         applicationId = "com.wavestream.app"
@@ -28,28 +23,8 @@ android {
         versionName = "1.0.0"
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-        debug {
-            isDebuggable = true
-            applicationIdSuffix = ".debug"
-        }
-    }
-
-    flavorDimensions += "state"
-    productFlavors {
-        create("stable") { dimension = "state" }
-        create("prerelease") {
-            dimension = "state"
-            applicationIdSuffix = ".prerelease"
-            versionNameSuffix = "-PRE"
-        }
+    buildFeatures {
+        compose = true
     }
 
     compileOptions {
@@ -57,24 +32,26 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
 dependencies {
     implementation(project(":shared"))
+    implementation(project(":library"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
     implementation(libs.material)
-    implementation(libs.kotlinx.serialization.json)
-    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    implementation(compose.runtime)
+    implementation(compose.foundation)
+    implementation(compose.material3)
+    implementation(compose.materialIconsExtended)
+    implementation(compose.ui)
+    implementation(compose.uiTooling)
 }

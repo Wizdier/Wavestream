@@ -1,24 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Wavestream</string>
-    <string name="app_layout_key">app_layout</string>
-    <string name="enable_nsfw_on_providers_key">enable_nsfw_providers</string>
-    <string name="use_jsdelivr_proxy_key">use_jsdelivr_proxy</string>
-    <string name="auto_update_plugins_key">auto_update_plugins</string>
-    <string name="auto_download_plugins_key">auto_download_plugins</string>
-    <string name="skip_startup_account_select_key">skip_startup_account</string>
-    <string name="overscan_key">overscan</string>
-    <string name="safe_mode_file">safe_mode</string>
-    <string name="safe_mode_title">Safe Mode</string>
-    <string name="safe_mode_description">An error occurred. Plugins have been disabled.</string>
-    <string name="safe_mode_crash_info">View crash details</string>
-    <string name="plugin_load_fail">Failed to load plugin %s</string>
-    <string name="starting_plugin_update_manually">Updating plugins...</string>
-    <string name="plugins_updated_manually">Updated %d plugins</string>
-    <string name="no_plugins_updated_manually">No plugins needed updating</string>
-    <string name="jsdelivr_enabled">jsdelivr proxy enabled (raw.githubusercontent.com unreachable)</string>
-    <string name="revert">Revert</string>
-    <string name="unable_to_inflate">Unable to inflate layout: %s</string>
-    <string name="biometric_authentication_title">Authenticate to continue</string>
-    <string name="play_with_app_name">Play with Wavestream</string>
 </resources>

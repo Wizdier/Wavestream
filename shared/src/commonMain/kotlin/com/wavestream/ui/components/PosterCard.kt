@@ -31,16 +31,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
-import com.wavestream.api.SearchResponse
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.MovieSearchResponse
+import com.lagradost.cloudstream3.TvSeriesSearchResponse
+import com.lagradost.cloudstream3.AnimeSearchResponse
 
-/**
- * Poster card — mirrors CloudStream's home/result poster layout.
- *
- * Used in horizontal rails on Home, search results grid, recommendations, etc.
- * Two layout variants: vertical poster (2:3 aspect) and horizontal banner (16:9).
- */
 @Composable
 fun PosterCard(
     item: SearchResponse,
@@ -72,8 +69,7 @@ fun PosterCard(
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            // Track image-load state manually to show shimmer + error placeholder
-            var imageState by remember { mutableStateOf<ImageLoadState>(ImageLoadState.Loading) }
+            var imageState: ImageLoadState by remember { mutableStateOf(ImageLoadState.Loading) }
 
             if (!item.posterUrl.isNullOrBlank()) {
                 val painter = rememberAsyncImagePainter(
@@ -100,7 +96,7 @@ fun PosterCard(
                             modifier = Modifier.size(28.dp),
                         )
                     }
-                    ImageLoadState.Loaded -> { /* image visible */ }
+                    ImageLoadState.Loaded -> {}
                 }
             } else {
                 Box(
@@ -112,25 +108,6 @@ fun PosterCard(
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(28.dp),
-                    )
-                }
-            }
-
-            // Quality badge in top-right
-            item.quality?.let { quality ->
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = quality.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
@@ -153,10 +130,7 @@ fun PosterCard(
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.7f),
-                            ),
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
                         ),
                     ),
             )
@@ -189,11 +163,10 @@ fun PosterCard(
             fontWeight = FontWeight.Medium,
         )
 
-        // Year subtitle for movies and series
         val subtitle = when (item) {
-            is com.wavestream.api.MovieSearchResponse -> item.year?.toString()
-            is com.wavestream.api.TvSeriesSearchResponse -> item.year?.toString()
-            is com.wavestream.api.AnimeSearchResponse -> item.otherName
+            is MovieSearchResponse -> item.year?.toString()
+            is TvSeriesSearchResponse -> item.year?.toString()
+            is AnimeSearchResponse -> item.otherName
             else -> null
         }
         subtitle?.let {
@@ -208,38 +181,30 @@ fun PosterCard(
     }
 }
 
-private sealed class ImageLoadState {
-    object Loading : ImageLoadState()
-    object Loaded : ImageLoadState()
-    object Error : ImageLoadState()
+private sealed interface ImageLoadState {
+    object Loading : ImageLoadState
+    object Loaded : ImageLoadState
+    object Error : ImageLoadState
 }
 
-/**
- * Loading placeholder card — shown while data is being fetched.
- */
 @Composable
-fun LoadingPosterCard(
-    modifier: Modifier = Modifier,
-    horizontal: Boolean = false,
-) {
-    val aspectRatio = if (horizontal) 16f / 9f else 2f / 3f
-    val width = if (horizontal) 240.dp else 120.dp
-
-    Column(
-        modifier = modifier.width(width).padding(4.dp),
-    ) {
-        ShimmerBox(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(aspectRatio),
-            cornerRadius = 8,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        ShimmerBox(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(12.dp),
-            cornerRadius = 2,
-        )
-    }
+fun ShimmerBox(modifier: Modifier = Modifier, cornerRadius: Int = 8) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "shimmer-alpha",
+    )
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(if (cornerRadius == 0) Modifier else Modifier)
+            .scale(1f)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)),
+    )
 }

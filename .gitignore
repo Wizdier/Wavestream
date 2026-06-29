@@ -1,8 +1,12 @@
 # Build artifacts
 /build/
-/app/build/
 /shared/build/
+/library/build/
+/app/build/
+
+# Gradle
 /.gradle/
+/.kotlin/
 
 # IDE
 /.idea/
@@ -19,17 +23,9 @@
 Thumbs.db
 
 # Local config
-/local.properties
+local.properties
 
-# Keystore
+# Generated
+*.apk
+*.aab
 *.keystore
-*.jks
-!debug.keystore
-
-# Logs
-*.log
-
-# Native
-*.so
-*.dylib
-*.dll
