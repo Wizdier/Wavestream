@@ -1,6 +1,6 @@
 # Wavestream — Distribution Package
 
-This package contains the complete Wavestream project source plus a prebuilt desktop jar.
+This package contains the complete Wavestream project source plus prebuilt desktop and Android binaries.
 
 ## Contents
 
@@ -25,7 +25,8 @@ wavestream/
 ├── app/                       # Android application entry point
 │
 └── dist/
-    └── Wavestream-linux-x64-1.0.0.jar  # Prebuilt desktop uber jar (Linux x64)
+    ├── Wavestream-linux-x64-1.0.0.jar  # Prebuilt desktop uber jar (Linux x64, 87 MB)
+    └── Wavestream-1.0.0-debug.apk      # Prebuilt Android debug APK (30 MB)
 ```
 
 ## Quickstart — Run the Desktop App
@@ -41,15 +42,31 @@ On first launch, the app creates `~/.wavestream/` with subdirectories:
 - `Downloads/` — placeholder for downloaded videos
 - `preferences.json` — JSON-file preferences store
 
+## Quickstart — Install the Android APK
+
+```bash
+adb install dist/Wavestream-1.0.0-debug.apk
+```
+
+Or copy the APK to your Android device and tap it in a file manager (enable "Install from unknown sources" first).
+
+The APK targets:
+- `minSdk = 26` (Android 8.0) — required because Rhino 1.9.1 uses `MethodHandle.invoke`
+- `targetSdk = 35` (Android 15)
+- `applicationId = com.wavestream.app`
+
 ## Quickstart — Build From Source
 
 ### Desktop verification (canonical)
 
 ```bash
+chmod +x ./gradlew        # only needed once after extracting the zip
 ./gradlew :library:compileKotlinDesktop :shared:compileKotlinDesktop
 ```
 
 This is the build target from the original reproduction guide. It compiles the patched CloudStream library and the entire Compose Multiplatform UI against the JVM target.
+
+> **Tip:** If you see `./gradlew: Permission denied`, run `chmod +x ./gradlew`. The GitHub Actions workflow already does this automatically.
 
 ### Run desktop UI from source
 
@@ -94,12 +111,14 @@ To verify the plugin loader works with real CloudStream extensions:
 
 ## Verification Status
 
+All targets now build successfully:
+
 - ✅ `./gradlew :library:compileKotlinDesktop` — passes
-- ✅ `./gradlew :shared:compileKotlinDesktop` — passes (the canonical target from the reproduction guide)
+- ✅ `./gradlew :shared:compileKotlinDesktop` — passes (canonical target from the reproduction guide)
 - ✅ `./gradlew :shared:desktopJar` — passes
 - ✅ `./gradlew :shared:packageUberJarForCurrentOS` — passes (this jar is in `dist/`)
-- ⚠️ `./gradlew :shared:packageDistributionForCurrentOS` — requires full JDK (jlink); not run in the build environment
-- ⚠️ `./gradlew :app:assembleDebug` — requires Android SDK; not run in the build environment. The CI workflow in `.github/workflows/build.yml` will run this on push.
+- ✅ `./gradlew :app:assembleDebug` — passes (this APK is in `dist/`)
+- ⚠️ `./gradlew :shared:packageDistributionForCurrentOS` — requires full JDK with `jlink`; not run in the build environment
 
 ## Build Environment Used
 
@@ -107,5 +126,14 @@ To verify the plugin loader works with real CloudStream extensions:
 - Gradle: 8.10.2 (via wrapper)
 - Kotlin: 2.2.20 (auto-downloaded by Gradle)
 - Compose Multiplatform: 1.8.0
-- Android SDK: not installed in build environment (CI provides it)
+- Android SDK: `platform-35` + `build-tools;35.0.0`
 - OS: Debian 13 (Linux x64)
+
+## Recent Fixes (this version)
+
+If you previously tried building and hit errors, this version fixes:
+
+1. **`./gradlew: Permission denied` in CI** — added `chmod +x ./gradlew` step to both CI jobs.
+2. **`MethodHandle.invoke ... only supported starting with Android O (--min-api 26)`** — Rhino 1.9.1 requires API 26. Bumped `minSdk` from 21 to 26 in all three modules.
+3. **`Unresolved reference 'initPlatform'` in MainActivity.kt** — fixed import from `com.wavestream.initPlatform` to `com.wavestream.platform.initPlatform`.
+4. **`2 files found with path 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'`** — added comprehensive `packaging.resources.excludes` block to `app/build.gradle.kts` covering OSGi manifests, signing files, kotlin_module files, and other common duplicate META-INF paths.

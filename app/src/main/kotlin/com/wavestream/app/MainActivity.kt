@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.wavestream.App
 import com.wavestream.WaveAppInit
-import com.wavestream.initPlatform
+import com.wavestream.platform.initPlatform
 import java.io.File
 
 class MainActivity : ComponentActivity() {

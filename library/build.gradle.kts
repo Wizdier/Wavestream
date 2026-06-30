@@ -57,7 +57,7 @@ kotlin {
 android {
     namespace = "com.lagradost.cloudstream3.library"
     compileSdk = 35
-    defaultConfig { minSdk = 21 }
+    defaultConfig { minSdk = 26 }  // Rhino 1.9.1 uses MethodHandle.invoke (requires API 26)
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 

@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "com.wavestream.app"
-        minSdk = 21
+        minSdk = 26  // must match :library (Rhino 1.9.1 requires API 26)
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
@@ -33,6 +33,22 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // OSGi manifests from okhttp-dnsoverhttps and jspecify collide.
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            // Signing files from transitive JARs (jackson, bouncy, etc.)
+            excludes += "/META-INF/*.SF"
+            excludes += "/META-INF/*.DSA"
+            excludes += "/META-INF/*.RSA"
+            // Kotlin module metadata files can collide between KMP artifacts.
+            excludes += "/META-INF/*.kotlin_module"
+            // Index files from various libs (often duplicated).
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/io.netty.versions.properties"
+            // License files commonly shipped by multiple deps.
+            excludes += "/META-INF/LICENSE*"
+            excludes += "/META-INF/NOTICE*"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/maven/**"
         }
     }
 }

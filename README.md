@@ -33,6 +33,8 @@ Wavestream has three modules:
 - Android SDK with `platform-35` and `build-tools;35.0.0` (for the Android target)
 - Internet access (Gradle pulls dependencies from Maven Central, Google, JitPack, and JetBrains' Compose dev repo)
 
+> **minSdk note:** All three modules use `minSdk = 26` (Android 8.0). This is required because Rhino 1.9.1 (the JS engine used by CloudStream's library to evaluate extractor scripts) uses `MethodHandle.invoke` / `invokeExact`, which only became available in Android API 26.
+
 ### Verify the build (Desktop only)
 
 ```bash
