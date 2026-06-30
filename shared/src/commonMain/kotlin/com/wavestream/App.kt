@@ -154,13 +154,16 @@ fun App() {
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
-                if (!bootState.stage.isReady && currentRoute == Routes.HOME) {
+                // While the boot orchestrator is still loading plugins, show a
+                // full-screen spinner on top of any tab. Once boot is READY
+                // or FAILED, the underlying screens render normally.
+                if (!bootState.stage.isReady && currentRoute in WaveTab.entries.map { it.route }) {
                     LoadingIndicator(message = bootState.message ?: "Booting…")
                 }
 
                 NavHost(
                     navController = navController,
-                    startDestination = Routes.HOME,
+                    startDestination = com.wavestream.ui.settings.WavePreferences.defaultTab,
                 ) {
                     composable(Routes.HOME) {
                         HomeScreen(

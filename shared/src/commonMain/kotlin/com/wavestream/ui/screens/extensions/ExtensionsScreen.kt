@@ -77,8 +77,14 @@ fun ExtensionsScreen(
         stremioAddons = StremioAddonRepository.listAddons()
     }
 
-    // Initial load
-    remember { refreshAll(); Unit }
+    // Initial load — runs once when the composable first enters composition,
+    // and again whenever the boot stage transitions to READY (so newly-seeded
+    // default repos show up without forcing the user to pull-refresh).
+    androidx.compose.runtime.LaunchedEffect(bootState.stage) {
+        if (bootState.stage.isReady || bootState.stage == com.wavestream.WaveAppInit.BootStage.FAILED) {
+            refreshAll()
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
