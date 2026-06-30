@@ -2,60 +2,76 @@ package com.wavestream.ui.screens.details
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.APIHolder
-import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.isMovieType
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.SubtitleFile
 import com.wavestream.ui.components.ErrorState
 import com.wavestream.ui.components.LoadingIndicator
 import com.wavestream.ui.components.PosterCard
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailsScreen(
     apiName: String,
     url: String,
-    onNavigateToPlayer: (url: String, source: String) -> Unit,
+    onNavigateToPlayer: (String, String) -> Unit,
     onNavigateBack: () -> Unit,
-    onNavigateToDetails: (apiName: String, url: String) -> Unit = { _, _ -> },
+    onNavigateToDetails: (String, String) -> Unit = { _, _ -> },
 ) {
-    val scope = rememberCoroutineScope()
-    var loadResponse by remember { mutableStateOf<LoadResponse?>(null) }
+    var resp by remember { mutableStateOf<LoadResponse?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var isLoadingLinks by remember { mutableStateOf(false) }
-    var availableLinks by remember { mutableStateOf<List<ExtractorLink>>(emptyList()) }
-    var showLinkPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(apiName, url) {
         isLoading = true
@@ -63,17 +79,12 @@ fun DetailsScreen(
         try {
             val api = APIHolder.getApiFromNameNull(apiName)
             if (api == null) {
-                error = "Provider '$apiName' not found. Make sure the extension is installed and enabled."
+                error = "Provider not found"
             } else {
-                val response = api.load(url)
-                if (response == null) {
-                    error = "Failed to load content."
-                } else {
-                    loadResponse = response
-                }
+                resp = api.load(url)
             }
         } catch (e: Throwable) {
-            error = e.message ?: "Unknown error"
+            error = e.message
         }
         isLoading = false
     }
@@ -81,161 +92,62 @@ fun DetailsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(loadResponse?.name ?: "Loading...", maxLines = 1) },
+                title = {
+                    Text(
+                        text = resp?.name ?: "Loading...",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading -> LoadingIndicator()
-                error != null -> ErrorState(
-                    message = error!!,
-                    onRetry = { onNavigateBack() },
-                )
-                loadResponse != null -> {
-                    val resp = loadResponse!!
+                error != null -> ErrorState(message = error!!, onRetry = onNavigateBack)
+                resp != null -> {
+                    val r = resp!!
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 32.dp),
                     ) {
-                        item { DetailsHero(resp) }
+                        item { Header(r) }
+                        item { ActionRow(r, onNavigateToPlayer, apiName) }
+                        item { OverviewSection(r) }
 
-                        item {
-                            DetailsActions(
-                                response = resp,
-                                isLoadingLinks = isLoadingLinks,
-                                onPlay = {
-                                    scope.launch {
-                                        if (resp.type.isMovieType()) {
-                                            isLoadingLinks = true
-                                            val links = loadLinksForItem(apiName, resp, null)
-                                            isLoadingLinks = false
-                                            if (links.isNotEmpty()) {
-                                                val best = links.maxByOrNull { it.quality } ?: links.first()
-                                                onNavigateToPlayer(best.url, best.source)
-                                            }
-                                        } else {
-                                            val firstEp = when (resp) {
-                                                is TvSeriesLoadResponse -> resp.episodes.firstOrNull()
-                                                is AnimeLoadResponse -> resp.episodes.values.firstOrNull()?.firstOrNull()
-                                                else -> null
-                                            }
-                                            if (firstEp != null) {
-                                                isLoadingLinks = true
-                                                val links = loadLinksForItem(apiName, resp, firstEp)
-                                                isLoadingLinks = false
-                                                if (links.isNotEmpty()) {
-                                                    val best = links.maxByOrNull { it.quality } ?: links.first()
-                                                    onNavigateToPlayer(best.url, best.source)
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                onShowSources = {
-                                    scope.launch {
-                                        isLoadingLinks = true
-                                        val links = if (resp.type.isMovieType()) {
-                                            loadLinksForItem(apiName, resp, null)
-                                        } else {
-                                            val firstEp = when (resp) {
-                                                is TvSeriesLoadResponse -> resp.episodes.firstOrNull()
-                                                is AnimeLoadResponse -> resp.episodes.values.firstOrNull()?.firstOrNull()
-                                                else -> null
-                                            }
-                                            loadLinksForItem(apiName, resp, firstEp)
-                                        }
-                                        isLoadingLinks = false
-                                        if (links.isNotEmpty()) {
-                                            availableLinks = links
-                                            showLinkPicker = true
-                                        }
-                                    }
-                                },
-                            )
-                        }
-
-                        item { DetailsMetadata(resp) }
-
-                        // Episodes
-                        when (resp) {
+                        when (r) {
                             is TvSeriesLoadResponse -> {
-                                if (resp.episodes.isNotEmpty()) {
+                                if (r.episodes.isNotEmpty()) {
                                     item {
                                         Text(
-                                            "Episodes (${resp.episodes.size})",
+                                            text = "Episodes (${r.episodes.size})",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.padding(16.dp),
                                         )
                                     }
-                                    items(resp.episodes) { ep ->
-                                        EpisodeRow(
-                                            episode = ep,
-                                            onClick = {
-                                                scope.launch {
-                                                    isLoadingLinks = true
-                                                    val links = loadLinksForItem(apiName, resp, ep)
-                                                    isLoadingLinks = false
-                                                    if (links.size > 1) {
-                                                        availableLinks = links
-                                                        showLinkPicker = true
-                                                    } else if (links.size == 1) {
-                                                        onNavigateToPlayer(links[0].url, links[0].source)
-                                                    }
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                            is AnimeLoadResponse -> {
-                                val allEps = resp.episodes.values.flatten().sortedBy { it.episode }
-                                if (allEps.isNotEmpty()) {
-                                    item {
-                                        Text(
-                                            "Episodes (${allEps.size})",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(16.dp),
-                                        )
-                                    }
-                                    items(allEps) { ep ->
-                                        EpisodeRow(
-                                            episode = ep,
-                                            onClick = {
-                                                scope.launch {
-                                                    isLoadingLinks = true
-                                                    val links = loadLinksForItem(apiName, resp, ep)
-                                                    isLoadingLinks = false
-                                                    if (links.size > 1) {
-                                                        availableLinks = links
-                                                        showLinkPicker = true
-                                                    } else if (links.size == 1) {
-                                                        onNavigateToPlayer(links[0].url, links[0].source)
-                                                    }
-                                                }
-                                            },
-                                        )
+                                    items(r.episodes) { ep ->
+                                        EpisodeRow(ep)
                                     }
                                 }
                             }
                             else -> {}
                         }
 
-                        // Recommendations
-                        resp.recommendations?.takeIf { it.isNotEmpty() }?.let { recs ->
+                        r.recommendations?.takeIf { it.isNotEmpty() }?.let { recs ->
                             item {
                                 Text(
-                                    "More Like This",
+                                    text = "More Like This",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(16.dp),
@@ -245,7 +157,10 @@ fun DetailsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     items(recs) { rec ->
-                                        PosterCard(item = rec, onClick = { onNavigateToDetails(rec.apiName, rec.url) })
+                                        PosterCard(
+                                            item = rec,
+                                            onClick = { onNavigateToDetails(rec.apiName, rec.url) },
+                                        )
                                     }
                                 }
                             }
@@ -255,124 +170,132 @@ fun DetailsScreen(
             }
         }
     }
-
-    if (showLinkPicker && availableLinks.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = { showLinkPicker = false },
-            title = { Text("Choose a stream (${availableLinks.size})") },
-            text = {
-                Column {
-                    availableLinks.forEach { link ->
-                        TextButton(
-                            onClick = {
-                                showLinkPicker = false
-                                onNavigateToPlayer(link.url, link.source)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    link.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    "${Qualities.getStringByInt(link.quality)} - ${link.source}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLinkPicker = false }) { Text("Cancel") }
-            },
-        )
-    }
 }
 
 @Composable
-private fun DetailsHero(response: LoadResponse) {
+private fun Header(r: LoadResponse) {
     Box(modifier = Modifier.fillMaxWidth().height(400.dp)) {
-        val backdrop = response.backgroundPosterUrl ?: response.posterUrl
+        val backdrop = r.backgroundPosterUrl ?: r.posterUrl
         if (backdrop != null) {
-            AsyncImage(model = backdrop, contentDescription = response.name, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = backdrop,
+                contentDescription = r.name,
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
-            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            )
         }
+
         Box(
-            modifier = Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Black.copy(alpha = 0.3f), Color.Transparent, MaterialTheme.colorScheme.background),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.3f),
+                            Color.Transparent,
+                            MaterialTheme.colorScheme.background,
+                        ),
+                    ),
                 ),
-            ),
         )
-        Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-            Text(response.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+        ) {
+            Text(
+                text = r.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                response.year?.let { Text("$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                response.score?.let { Text("* ${"%.1f".format(it.toFloat())}", color = MaterialTheme.colorScheme.secondary) }
-                response.duration?.let { Text("$it min", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                r.year?.let {
+                    Text(
+                        text = "$it",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                r.score?.let {
+                    Text(
+                        text = "* ${"%.1f".format(it.toFloat())}",
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                r.duration?.let {
+                    Text(
+                        text = "$it min",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DetailsActions(
-    response: LoadResponse,
-    isLoadingLinks: Boolean,
-    onPlay: () -> Unit,
-    onShowSources: () -> Unit,
+private fun ActionRow(
+    r: LoadResponse,
+    onNavigateToPlayer: (String, String) -> Unit,
+    apiName: String,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Button(
-            onClick = onPlay,
+            onClick = {
+                val dataUrl = when (r) {
+                    is MovieLoadResponse -> r.dataUrl
+                    is TvSeriesLoadResponse -> r.episodes.firstOrNull()?.data
+                    else -> null
+                }
+                if (dataUrl != null) {
+                    onNavigateToPlayer(dataUrl, apiName)
+                }
+            },
             modifier = Modifier.weight(1f),
-            enabled = !isLoadingLinks,
         ) {
-            if (isLoadingLinks) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Loading streams...")
-            } else {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(if (response.type.isMovieType()) "Play" else "Play First Episode")
-            }
-        }
-        OutlinedButton(
-            onClick = onShowSources,
-            enabled = !isLoadingLinks,
-        ) {
-            Icon(Icons.Filled.VideoLibrary, contentDescription = null)
+            Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Sources")
+            Text(text = if (r.type.isMovieType()) "Play" else "Play First")
+        }
+
+        OutlinedButton(onClick = { /* sources */ }) {
+            Icon(imageVector = Icons.Filled.VideoLibrary, contentDescription = null)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = "Sources")
         }
     }
 }
 
 @Composable
-private fun DetailsMetadata(response: LoadResponse) {
+private fun OverviewSection(r: LoadResponse) {
     Column(modifier = Modifier.padding(16.dp)) {
-        response.plot?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        r.plot?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Spacer(modifier = Modifier.height(8.dp))
         }
-        response.tags?.takeIf { it.isNotEmpty() }?.let { tags ->
+        r.tags?.takeIf { it.isNotEmpty() }?.let { tags ->
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 tags.forEach { tag ->
-                    AssistChip(onClick = {}, label = { Text(tag) })
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(text = tag) },
+                    )
                 }
             }
         }
@@ -380,25 +303,29 @@ private fun DetailsMetadata(response: LoadResponse) {
 }
 
 @Composable
-private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
+private fun EpisodeRow(ep: Episode) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable(onClick = onClick),
+            .clickable {},
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
-                modifier = Modifier.size(120.dp, 68.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .size(width = 120.dp, height = 68.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.BottomStart,
             ) {
-                episode.posterUrl?.let {
-                    AsyncImage(model = it, contentDescription = episode.name, modifier = Modifier.fillMaxSize())
-                }
                 Text(
-                    text = "S${episode.season ?: 1} E${episode.episode ?: 0}",
-                    modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                    text = "S${ep.season ?: 1} E${ep.episode ?: 0}",
+                    modifier = Modifier.padding(4.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
@@ -406,40 +333,11 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = episode.name ?: "Episode ${episode.episode}",
+                    text = ep.name ?: "Episode ${ep.episode}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                episode.description?.let {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                }
             }
         }
     }
-}
-
-private suspend fun loadLinksForItem(
-    apiName: String,
-    response: LoadResponse,
-    episode: Episode?,
-): List<ExtractorLink> = withContext(Dispatchers.Default) {
-    val api = APIHolder.getApiFromNameNull(apiName) ?: return@withContext emptyList()
-
-    val data = when (response) {
-        is MovieLoadResponse -> response.dataUrl.ifBlank { response.url }
-        is TvSeriesLoadResponse -> episode?.data ?: response.episodes.firstOrNull()?.data ?: response.url
-        is AnimeLoadResponse -> episode?.data ?: response.episodes.values.firstOrNull()?.firstOrNull()?.data ?: response.url
-        else -> response.url
-    }
-
-    val links = mutableListOf<ExtractorLink>()
-    val subs = mutableListOf<SubtitleFile>()
-    try {
-        api.loadLinks(data, isCasting = false, { subs.add(it) }, { links.add(it) })
-    } catch (e: Throwable) {
-        println("[Details] loadLinks failed: ${e.message}")
-    }
-    links
 }

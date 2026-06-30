@@ -1,15 +1,37 @@
 package com.wavestream.ui.screens.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -22,18 +44,20 @@ import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.wavestream.InitState
 import com.wavestream.WaveAppInit
 import com.wavestream.ui.components.EmptyState
 import com.wavestream.ui.components.PosterCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeScreen(
-    onNavigateToDetails: (apiName: String, url: String) -> Unit,
+    onNavigateToDetails: (String, String) -> Unit,
     onNavigateToSearch: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -41,29 +65,25 @@ fun HomeScreen(
     var isLoading by remember { mutableStateOf(true) }
     var heroItem by remember { mutableStateOf<SearchResponse?>(null) }
     val initState by WaveAppInit.initState.collectAsState()
+    var lastGen by remember { mutableStateOf(0) }
 
-    // Auto-reload home when init state transitions to Ready
-    var lastInitGeneration by remember { mutableStateOf(0) }
     LaunchedEffect(initState) {
-        if (initState is com.wavestream.InitState.Ready) {
-            val newGen = (initState as com.wavestream.InitState.Ready).providerCount
-            if (newGen != lastInitGeneration) {
-                lastInitGeneration = newGen
-                scope.launch {
-                    isLoading = true
-                    sections = loadHomeContent()
-                    heroItem = sections.firstOrNull()?.list?.randomOrNull()
-                    isLoading = false
-                }
+        val ready = initState as? InitState.Ready ?: return@LaunchedEffect
+        if (ready.providerCount != lastGen) {
+            lastGen = ready.providerCount
+            scope.launch {
+                isLoading = true
+                sections = loadHome()
+                heroItem = sections.firstOrNull()?.list?.randomOrNull()
+                isLoading = false
             }
         }
     }
 
-    // Initial load
     LaunchedEffect(Unit) {
         if (sections.isEmpty()) {
             isLoading = true
-            sections = loadHomeContent()
+            sections = loadHome()
             heroItem = sections.firstOrNull()?.list?.randomOrNull()
             isLoading = false
         }
@@ -74,46 +94,55 @@ fun HomeScreen(
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
         item {
-            HeroSection(
+            Hero(
                 item = heroItem,
-                onPlay = { hero -> onNavigateToDetails(hero.apiName, hero.url) },
-                onInfo = { hero -> onNavigateToDetails(hero.apiName, hero.url) },
+                onPlay = { onNavigateToDetails(it.apiName, it.url) },
+                onInfo = { onNavigateToDetails(it.apiName, it.url) },
             )
         }
 
         if (isLoading) {
             item {
-                Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     CircularProgressIndicator()
-                    Spacer(Modifier.height(12.dp))
-                    val msg = (initState as? com.wavestream.InitState.Loading)?.message ?: "Loading content..."
-                    Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = (initState as? InitState.Loading)?.message ?: "Loading...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
 
         items(sections, key = { it.name }) { section ->
-            HomeRail(
+            Rail(
                 title = section.name,
                 items = section.list,
                 horizontal = section.isHorizontalImages,
-                onItemClick = { onNavigateToDetails(it.apiName, it.url) },
+                onClick = { onNavigateToDetails(it.apiName, it.url) },
             )
         }
 
         if (!isLoading && sections.isEmpty()) {
             item {
                 EmptyState(
-                    title = "No content available",
-                    message = "Install extensions from Settings → Extensions to start watching.",
+                    title = "No content",
+                    message = "Install extensions from Settings.",
                 )
             }
             item {
-                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
                     Button(onClick = onNavigateToSearch) {
-                        Icon(Icons.Filled.Search, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Search")
+                        Icon(imageVector = Icons.Filled.Search, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Search")
                     }
                 }
             }
@@ -122,7 +151,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HeroSection(
+private fun Hero(
     item: SearchResponse?,
     onPlay: (SearchResponse) -> Unit,
     onInfo: (SearchResponse) -> Unit,
@@ -166,47 +195,49 @@ private fun HeroSection(
                 .align(Alignment.BottomStart)
                 .padding(16.dp),
         ) {
-            item?.let {
+            if (item != null) {
                 Text(
-                    it.name,
+                    text = item.name,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row {
-                    Button(onClick = { onPlay(it) }) {
-                        Icon(Icons.Filled.PlayArrow, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Play")
+                    Button(onClick = { onPlay(item) }) {
+                        Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Play")
                     }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { onInfo(it) }) {
-                        Text("Info")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(onClick = { onInfo(item) }) {
+                        Text(text = "Info")
                     }
                 }
-            } ?: Text(
-                "Wavestream",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            } else {
+                Text(
+                    text = "Wavestream",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun HomeRail(
+private fun Rail(
     title: String,
     items: List<SearchResponse>,
     horizontal: Boolean,
-    onItemClick: (SearchResponse) -> Unit,
+    onClick: (SearchResponse) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Text(
-            title,
+            text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -217,36 +248,36 @@ private fun HomeRail(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             items(items, key = { it.url + it.apiName }) { item ->
-                PosterCard(item = item, onClick = { onItemClick(item) }, horizontal = horizontal)
+                PosterCard(
+                    item = item,
+                    onClick = { onClick(item) },
+                    horizontal = horizontal,
+                )
             }
         }
     }
 }
 
-private suspend fun loadHomeContent(): List<HomePageList> = withContext(Dispatchers.Default) {
+private suspend fun loadHome(): List<HomePageList> = withContext(Dispatchers.Default) {
     val providers = APIHolder.allProviders.toList().filter { it.hasMainPage }
     if (providers.isEmpty()) return@withContext emptyList()
-
-    val deferredList = mutableListOf<kotlinx.coroutines.Deferred<List<HomePageList>>>()
-    kotlinx.coroutines.coroutineScope {
-        for (api in providers) {
-            for (mainPageData in api.mainPage) {
-                deferredList.add(async {
-                    try {
-                        val response = api.getMainPage(
-                            1,
-                            MainPageRequest(mainPageData.name, mainPageData.data, mainPageData.horizontalImages),
-                        )
-                        response?.items?.map { list ->
-                            list.copy(name = "${list.name} • ${api.name}")
-                        } ?: emptyList()
-                    } catch (e: Throwable) {
-                        println("[Home] Failed to load ${api.name}/${mainPageData.name}: ${e.message}")
-                        emptyList()
+    coroutineScope {
+        providers
+            .flatMap { api ->
+                api.mainPage.map { mpd ->
+                    async {
+                        try {
+                            api.getMainPage(1, MainPageRequest(mpd.name, mpd.data, mpd.horizontalImages))
+                                ?.items
+                                ?.map { it.copy(name = "${it.name} - ${api.name}") }
+                                ?: emptyList()
+                        } catch (e: Throwable) {
+                            emptyList()
+                        }
                     }
-                })
+                }
             }
-        }
+            .awaitAll()
+            .flatten()
     }
-    deferredList.awaitAll().flatten()
 }

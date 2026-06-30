@@ -4,11 +4,9 @@ import androidx.compose.runtime.Composable
 import com.wavestream.ui.components.EmptyState
 
 @Composable
-fun DownloadsScreen(
-    onNavigateToPlayer: (url: String) -> Unit,
-) {
+fun DownloadsScreen(onNavigateToPlayer: (String) -> Unit) {
     EmptyState(
-        title = "No downloads yet",
-        message = "Download shows and movies to watch offline.",
+        title = "No downloads",
+        message = "Download content to watch offline.",
     )
 }

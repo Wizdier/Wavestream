@@ -26,37 +26,17 @@ import com.wavestream.ui.screens.settings.SettingsScreen
 private fun String.urlEncode(): String {
     val sb = StringBuilder()
     for (byte in toByteArray()) {
-        val v = byte.toInt() and 0xFF
-        val c = v.toChar()
-        if (c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '-' || c == '_' || c == '.' || c == '~') {
-            sb.append(c)
-        } else {
-            sb.append('%')
-            sb.append("0123456789ABCDEF"[v shr 4])
-            sb.append("0123456789ABCDEF"[v and 0x0F])
-        }
+        val v = byte.toInt() and 0xFF; val c = v.toChar()
+        if (c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '-' || c == '_' || c == '.' || c == '~') sb.append(c)
+        else { sb.append('%'); sb.append("0123456789ABCDEF"[v shr 4]); sb.append("0123456789ABCDEF"[v and 0x0F]) }
     }
     return sb.toString()
 }
-
 private fun String.urlDecode(): String {
-    val sb = StringBuilder()
-    var i = 0
-    while (i < length) {
-        val c = this[i]
-        if (c == '%' && i + 2 < length) {
-            val hex = substring(i + 1, i + 3)
-            val v = hex.toInt(16)
-            sb.append(v.toChar())
-            i += 3
-        } else {
-            sb.append(c)
-            i++
-        }
-    }
+    val sb = StringBuilder(); var i = 0
+    while (i < length) { val c = this[i]; if (c == '%' && i + 2 < length) { sb.append(substring(i+1, i+3).toInt(16).toChar()); i += 3 } else { sb.append(c); i++ } }
     return sb.toString()
 }
-
 private val mainRoutes = setOf("home", "search", "library", "downloads", "settings")
 
 @Composable
@@ -65,121 +45,23 @@ fun App() {
         val navController = rememberNavController()
         val currentBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = currentBackStackEntry?.destination?.route
-
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            bottomBar = {
-                if (currentRoute in mainRoutes) {
-                    WaveBottomBar(
-                        currentRoute = currentRoute,
-                        onNavigate = { route ->
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
+        Scaffold(modifier = Modifier.fillMaxSize(), bottomBar = { if (currentRoute in mainRoutes) { WaveBottomBar(currentRoute) { route -> navController.navigate(route) { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } } } }) { padding ->
+            NavHost(navController, "home", Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background)) {
+                composable("home") { HomeScreen({ a, u -> navController.navigate("details/${a.urlEncode()}/${u.urlEncode()}") }, { navController.navigate("search") { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } }) }
+                composable("search") { SearchScreen({ a, u -> navController.navigate("details/${a.urlEncode()}/${u.urlEncode()}") }) }
+                composable("library") { LibraryScreen({ a, u -> navController.navigate("details/${a.urlEncode()}/${u.urlEncode()}") }) }
+                composable("downloads") { DownloadsScreen({ u -> navController.navigate("player/local/${u.urlEncode()}") }) }
+                composable("settings") { SettingsScreen { navController.navigate("extensions") } }
+                composable("extensions") { ExtensionsScreen { navController.popBackStack() } }
+                composable("details/{apiName}/{url}", listOf(navArgument("apiName") { type = NavType.StringType }, navArgument("url") { type = NavType.StringType })) { e ->
+                    val a = e.arguments?.read { getStringOrNull("apiName") }?.urlDecode() ?: return@composable
+                    val u = e.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
+                    DetailsScreen(a, u, { lu, s -> navController.navigate("player/${s.urlEncode()}/${lu.urlEncode()}") }, { navController.popBackStack() }, { da, du -> navController.navigate("details/${da.urlEncode()}/${du.urlEncode()}") })
                 }
-            },
-        ) { padding ->
-            NavHost(
-                navController = navController,
-                startDestination = "home",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .background(MaterialTheme.colorScheme.background),
-            ) {
-                composable("home") {
-                    HomeScreen(
-                        onNavigateToDetails = { apiName, url ->
-                            navController.navigate("details/${apiName.urlEncode()}/${url.urlEncode()}")
-                        },
-                        onNavigateToSearch = {
-                            navController.navigate("search") {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
-                }
-
-                composable("search") {
-                    SearchScreen(
-                        onNavigateToDetails = { apiName, url ->
-                            navController.navigate("details/${apiName.urlEncode()}/${url.urlEncode()}")
-                        },
-                    )
-                }
-
-                composable("library") {
-                    LibraryScreen(
-                        onNavigateToDetails = { apiName, url ->
-                            navController.navigate("details/${apiName.urlEncode()}/${url.urlEncode()}")
-                        },
-                    )
-                }
-
-                composable("downloads") {
-                    DownloadsScreen(
-                        onNavigateToPlayer = { url ->
-                            navController.navigate("player/local/${url.urlEncode()}")
-                        },
-                    )
-                }
-
-                composable("settings") {
-                    SettingsScreen(
-                        onNavigateToExtensions = { navController.navigate("extensions") },
-                    )
-                }
-
-                composable("extensions") {
-                    ExtensionsScreen(
-                        onNavigateBack = { navController.popBackStack() },
-                    )
-                }
-
-                composable(
-                    route = "details/{apiName}/{url}",
-                    arguments = listOf(
-                        navArgument("apiName") { type = NavType.StringType },
-                        navArgument("url") { type = NavType.StringType },
-                    ),
-                ) { backStackEntry ->
-                    val apiName = backStackEntry.arguments?.read { getStringOrNull("apiName") }?.urlDecode() ?: return@composable
-                    val url = backStackEntry.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
-                    DetailsScreen(
-                        apiName = apiName,
-                        url = url,
-                        onNavigateToPlayer = { linkUrl, source ->
-                            navController.navigate("player/${source.urlEncode()}/${linkUrl.urlEncode()}")
-                        },
-                        onNavigateBack = { navController.popBackStack() },
-                        onNavigateToDetails = { detailApiName, detailUrl ->
-                            navController.navigate("details/${detailApiName.urlEncode()}/${detailUrl.urlEncode()}")
-                        },
-                    )
-                }
-
-                composable(
-                    route = "player/{source}/{url}",
-                    arguments = listOf(
-                        navArgument("source") { type = NavType.StringType },
-                        navArgument("url") { type = NavType.StringType },
-                    ),
-                ) { backStackEntry ->
-                    val source = backStackEntry.arguments?.read { getStringOrNull("source") }?.urlDecode() ?: return@composable
-                    val url = backStackEntry.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
-                    PlayerScreen(
-                        source = source,
-                        url = url,
-                        onNavigateBack = { navController.popBackStack() },
-                    )
+                composable("player/{source}/{url}", listOf(navArgument("source") { type = NavType.StringType }, navArgument("url") { type = NavType.StringType })) { e ->
+                    val s = e.arguments?.read { getStringOrNull("source") }?.urlDecode() ?: return@composable
+                    val u = e.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
+                    PlayerScreen(s, u, { navController.popBackStack() })
                 }
             }
         }

@@ -740,7 +740,6 @@ fun MainAPI.fixUrl(url: String): String {
     if (url.startsWith("http") ||
         // Do not fix JSON objects and arrays when passed as urls.
         url.startsWith("{\"") || url.startsWith("[") ||
-        // Pass through custom URL schemes (e.g. stremio:movie:tt1234567)
         url.startsWith("stremio:")
     ) {
         return url
@@ -2721,9 +2720,7 @@ fun isUpcoming(dateString: String?): Boolean {
         val kotlinxInstant = runCatching { components.toInstantUsingOffset() }
             .recoverCatching { components.toLocalDateTime().toInstant(TimeZone.currentSystemDefault()) }
             .getOrElse { components.toLocalDate().atStartOfDayIn(TimeZone.currentSystemDefault()) }
-        // Convert kotlinx.datetime.Instant to epoch millis for comparison with Clock.System.now()
-        val nowMs = Clock.System.now().toEpochMilliseconds()
-        nowMs < kotlinxInstant.toEpochMilliseconds()
+        val nowMs = Clock.System.now().toEpochMilliseconds(); nowMs < kotlinxInstant.toEpochMilliseconds()
     }.onFailure { logError(it) }.getOrElse { false }
 }
 

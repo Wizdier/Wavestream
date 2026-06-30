@@ -1,18 +1,33 @@
 package com.wavestream.ui.components
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,11 +47,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.rememberAsyncImagePainter
-import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.MovieSearchResponse
-import com.lagradost.cloudstream3.TvSeriesSearchResponse
 import com.lagradost.cloudstream3.AnimeSearchResponse
+import com.lagradost.cloudstream3.MovieSearchResponse
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.TvSeriesSearchResponse
+
+private enum class ImgState { Loading, Loaded, Error }
 
 @Composable
 fun PosterCard(
@@ -49,17 +65,22 @@ fun PosterCard(
     val width = if (horizontal) 240.dp else 120.dp
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
+    val scale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "cardScale",
     )
+    var imgState by remember { mutableStateOf(ImgState.Loading) }
 
     Column(
         modifier = modifier
             .width(width)
             .scale(scale)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(4.dp),
     ) {
         Box(
@@ -69,13 +90,11 @@ fun PosterCard(
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            var imageState: ImageLoadState by remember { mutableStateOf(ImageLoadState.Loading) }
-
             if (!item.posterUrl.isNullOrBlank()) {
                 val painter = rememberAsyncImagePainter(
                     model = item.posterUrl,
-                    onSuccess = { imageState = ImageLoadState.Loaded },
-                    onError = { imageState = ImageLoadState.Error },
+                    onSuccess = { imgState = ImgState.Loaded },
+                    onError = { imgState = ImgState.Error },
                 )
                 Image(
                     painter = painter,
@@ -83,20 +102,20 @@ fun PosterCard(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                 )
-                when (imageState) {
-                    ImageLoadState.Loading -> ShimmerBox(modifier = Modifier.fillMaxSize(), cornerRadius = 0)
-                    ImageLoadState.Error -> Box(
+                when (imgState) {
+                    ImgState.Loading -> ShimmerBox(Modifier.fillMaxSize())
+                    ImgState.Error -> Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.BrokenImage,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    ImageLoadState.Loaded -> {}
+                    ImgState.Loaded -> { }
                 }
             } else {
                 Box(
@@ -106,13 +125,12 @@ fun PosterCard(
                     Icon(
                         imageVector = Icons.Filled.Image,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 }
             }
 
-            // Pressed border highlight
             if (isPressed) {
                 Box(
                     modifier = Modifier
@@ -122,37 +140,19 @@ fun PosterCard(
                 )
             }
 
-            // Bottom gradient overlay
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
                         ),
                     ),
             )
-
-            // Play icon overlay when pressed
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isPressed,
-                enter = androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.fadeOut(),
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayCircle,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
-            }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(Modifier.height(4.dp))
 
         Text(
             text = item.name,
@@ -181,14 +181,8 @@ fun PosterCard(
     }
 }
 
-private sealed interface ImageLoadState {
-    object Loading : ImageLoadState
-    object Loaded : ImageLoadState
-    object Error : ImageLoadState
-}
-
 @Composable
-fun ShimmerBox(modifier: Modifier = Modifier, cornerRadius: Int = 8) {
+fun ShimmerBox(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val alpha by transition.animateFloat(
         initialValue = 0.3f,
@@ -197,14 +191,11 @@ fun ShimmerBox(modifier: Modifier = Modifier, cornerRadius: Int = 8) {
             animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "shimmer-alpha",
+        label = "shimmerAlpha",
     )
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(cornerRadius.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (cornerRadius == 0) Modifier else Modifier)
-            .scale(1f)
+            .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)),
     )
 }

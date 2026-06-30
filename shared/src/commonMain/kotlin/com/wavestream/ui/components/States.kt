@@ -1,6 +1,12 @@
 package com.wavestream.ui.components
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,8 +26,8 @@ fun ErrorState(
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = "Something went wrong",
@@ -36,9 +42,11 @@ fun ErrorState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        if (onRetry != null) {
+        onRetry?.let {
             Spacer(modifier = Modifier.height(16.dp))
-            TextButton(onClick = onRetry) { Text("Retry") }
+            TextButton(onClick = it) {
+                Text(text = "Retry")
+            }
         }
     }
 }
@@ -51,8 +59,8 @@ fun EmptyState(
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = title,
@@ -76,8 +84,6 @@ fun LoadingIndicator(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        CircularProgressIndicator(
-            color = MaterialTheme.colorScheme.primary,
-        )
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
     }
 }

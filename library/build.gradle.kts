@@ -7,32 +7,13 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
-// Use JDK 17 toolchain — Gradle's foojay resolver auto-downloads it if missing
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
+java { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }
 val javaTarget = JvmTarget.fromTarget("17")
 
 kotlin {
     androidTarget()
-
-    jvm("desktop") {
-        compilerOptions {
-            jvmTarget.set(javaTarget)
-            freeCompilerArgs.add("-Xjvm-default=all")
-        }
-    }
-
-    compilerOptions {
-        freeCompilerArgs.addAll(
-            "-Xexpect-actual-classes",
-            "-Xannotation-default-target=param-property"
-        )
-    }
-
+    jvm("desktop") { compilerOptions { freeCompilerArgs.add("-Xjvm-default=all") } }
+    compilerOptions { freeCompilerArgs.addAll("-Xexpect-actual-classes", "-Xannotation-default-target=param-property") }
     sourceSets {
         all {
             languageSettings {
@@ -43,7 +24,6 @@ kotlin {
                 optIn("kotlinx.datetime.format.FormatStringsInDatetimeFormats")
             }
         }
-
         val commonMain by getting {
             dependencies {
                 implementation(libs.kotlinx.coroutines.core)
@@ -62,37 +42,15 @@ kotlin {
                 implementation(libs.gson)
             }
         }
-
-        val androidMain by getting {
-            dependencies {
-                implementation(libs.kotlinx.coroutines.android)
-            }
-        }
-
-        val desktopMain by getting {
-            dependencies {
-                implementation(libs.kotlinx.coroutines.swing)
-            }
-        }
+        val androidMain by getting { dependencies { implementation(libs.kotlinx.coroutines.android) } }
+        val desktopMain by getting { dependencies { implementation(libs.kotlinx.coroutines.swing) } }
     }
 }
 
 android {
     namespace = "com.lagradost.cloudstream3.library"
     compileSdk = 35
-
-    defaultConfig {
-        minSdk = 21
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
+    defaultConfig { minSdk = 21 }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
-
-tasks.withType<KotlinJvmCompile> {
-    compilerOptions {
-        jvmTarget.set(javaTarget)
-    }
-}
+tasks.withType<KotlinJvmCompile> { compilerOptions { jvmTarget.set(javaTarget) } }

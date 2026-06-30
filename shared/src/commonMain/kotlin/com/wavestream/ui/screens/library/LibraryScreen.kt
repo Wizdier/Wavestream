@@ -1,50 +1,44 @@
 package com.wavestream.ui.screens.library
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.TvType
 import com.wavestream.ui.components.EmptyState
-import com.wavestream.ui.components.PosterCard
 
 @Composable
-fun LibraryScreen(
-    onNavigateToDetails: (apiName: String, url: String) -> Unit,
-) {
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Bookmarks", "Watching", "Watched")
-
+fun LibraryScreen(onNavigateToDetails: (String, String) -> Unit) {
+    var tab by remember { mutableStateOf(0) }
     Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
+        TabRow(selectedTabIndex = tab) {
+            listOf("Bookmarks", "Watching", "Watched").forEachIndexed { i, label ->
                 Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) },
+                    selected = tab == i,
+                    onClick = { tab = i },
+                    text = { Text(text = label) },
                 )
             }
         }
-
-        when (selectedTab) {
+        when (tab) {
             0 -> EmptyState(
-                title = "No bookmarks yet",
-                message = "Bookmark shows and movies to find them here.",
+                title = "No bookmarks",
+                message = "Bookmark shows to find them here.",
             )
             1 -> EmptyState(
-                title = "Not watching anything",
-                message = "Start watching a show and it will appear here.",
+                title = "Not watching",
+                message = "Start watching something.",
             )
             2 -> EmptyState(
-                title = "Nothing watched yet",
-                message = "Completed shows will appear here.",
+                title = "Nothing watched",
+                message = "Completed shows appear here.",
             )
         }
     }

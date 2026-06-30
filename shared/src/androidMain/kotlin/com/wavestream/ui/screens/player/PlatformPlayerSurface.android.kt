@@ -1,7 +1,6 @@
 package com.wavestream.ui.screens.player
 
 import android.net.Uri
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,32 +13,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 
 @Composable
-actual fun PlatformPlayerSurface(
-    url: String,
-    modifier: Modifier,
-    isPlaying: Boolean,
-) {
+actual fun PlatformPlayerSurface(url: String, modifier: Modifier, isPlaying: Boolean) {
     val context = LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(Uri.parse(url))
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true
-        }
-    }
-
-    LaunchedEffect(isPlaying) {
-        exoPlayer.playWhenReady = isPlaying
-    }
-
-    AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { ctx ->
-            PlayerView(ctx).apply {
-                player = exoPlayer
-                useController = true
-            }
-        },
-    )
+    val exoPlayer = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(Uri.parse(url))); prepare(); playWhenReady = true } }
+    LaunchedEffect(isPlaying) { exoPlayer.playWhenReady = isPlaying }
+    AndroidView(modifier.fillMaxSize(), factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = true } })
 }
