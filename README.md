@@ -36,10 +36,13 @@ Wavestream has three modules:
 ### Verify the build (Desktop only)
 
 ```bash
+chmod +x ./gradlew        # only needed once after extracting the zip
 ./gradlew :library:compileKotlinDesktop :shared:compileKotlinDesktop
 ```
 
 This is the canonical verification target — both modules compile against the JVM target.
+
+> **Tip:** If you see `./gradlew: Permission denied`, run `chmod +x ./gradlew`. The GitHub Actions workflow already does this automatically.
 
 ### Run the desktop app
 

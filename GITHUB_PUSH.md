@@ -59,6 +59,41 @@ After pushing, the GitHub Actions CI workflow (`.github/workflows/build.yml`) wi
 
 Artifacts are uploaded to the Actions run page. Look for the green checkmark on the latest commit on `main`.
 
+## Common CI Issues
+
+### `./gradlew: Permission denied`
+
+If the GitHub Actions run fails with:
+
+```
+./gradlew: Permission denied
+```
+
+it means the `gradlew` script lost its executable bit during the zip extraction / push. The CI workflow includes a `chmod +x ./gradlew` step before any `./gradlew` invocation, so this should not happen on the latest commit. If you're running into this:
+
+1. **Verify the file is executable in your local clone:**
+   ```bash
+   ls -la gradlew
+   # Should show -rwxr-xr-x or similar (the 'x' bits matter)
+   ```
+
+2. **If it's not executable, fix it and re-commit:**
+   ```bash
+   chmod +x gradlew
+   git add gradlew
+   git commit -m "Fix gradlew executable bit"
+   git push
+   ```
+
+3. **Verify git tracked the mode change:**
+   ```bash
+   git ls-files -s gradlew
+   # Should show: 100755 <sha> 0        gradlew
+   # (NOT 100644 — that's the non-executable mode)
+   ```
+
+If you originally cloned/pushed from Windows, the executable bit may have been stripped. Re-applying `chmod +x` from a macOS/Linux machine and re-committing fixes it permanently.
+
 ## What's in the Repo
 
 The initial commit contains **187 files** totaling **~22,400 lines** of code:
