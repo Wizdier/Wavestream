@@ -1,22 +1,13 @@
 package com.wavestream.ui.screens.player
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,87 +17,76 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
+import com.wavestream.ui.components.LoadingIndicator
+import com.wavestream.ui.player.LocalVideoPlayer
 
+/**
+ * Player screen. The actual rendering is delegated to a platform-specific
+ * video player via [LocalVideoPlayer] — on Android this wraps ExoPlayer,
+ * on desktop it falls back to a simple "open in external player" message
+ * since Java doesn't ship a video decoder.
+ *
+ * The screen handles back-button dismissal and shows a loading spinner
+ * while the platform player is buffering.
+ */
 @Composable
 fun PlayerScreen(
-    source: String,
-    url: String,
-    onNavigateBack: () -> Unit,
+    videoUrl: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var isPlaying by remember { mutableStateOf(true) }
-    var controlsVisible by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val player = LocalVideoPlayer.current
 
-    LaunchedEffect(controlsVisible, isPlaying) {
-        if (controlsVisible && isPlaying) {
-            delay(5000)
-            controlsVisible = false
+    LaunchedEffect(videoUrl) {
+        loading = true
+        error = null
+        try {
+            player.play(videoUrl) { ok ->
+                if (!ok) error = "Failed to play $videoUrl"
+                loading = false
+            }
+        } catch (e: Throwable) {
+            error = e.message ?: "Unknown playback error"
+            loading = false
         }
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .clickable { controlsVisible = !controlsVisible },
+            .background(MaterialTheme.colorScheme.background),
     ) {
-        PlatformPlayerSurface(
-            url = url,
-            modifier = Modifier.fillMaxSize(),
-            isPlaying = isPlaying,
-        )
-
-        AnimatedVisibility(
-            visible = controlsVisible,
-            modifier = Modifier.fillMaxSize(),
+        // Top-left back button overlay
+        IconButton(
+            onClick = {
+                player.stop()
+                onBack()
+            },
+            modifier = Modifier.align(Alignment.TopStart),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopStart)
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = source,
-                        color = Color.White,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                    )
-                }
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
 
-                IconButton(
-                    onClick = { isPlaying = !isPlaying },
-                    modifier = Modifier.align(Alignment.Center),
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Color.White,
-                        modifier = Modifier.size(64.dp),
-                    )
-                }
-            }
+        when {
+            loading -> LoadingIndicator(message = "Preparing playback…")
+            error != null -> Text(
+                text = error!!,
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            else -> Text(
+                text = "Now playing: $videoUrl",
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
     }
 }
-
-@Composable
-expect fun PlatformPlayerSurface(
-    url: String,
-    modifier: Modifier,
-    isPlaying: Boolean,
-)

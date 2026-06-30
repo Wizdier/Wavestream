@@ -1,19 +1,12 @@
 package com.wavestream.ui.components
 
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,13 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BrokenImage
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,159 +30,137 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.rememberAsyncImagePainter
-import com.lagradost.cloudstream3.AnimeSearchResponse
-import com.lagradost.cloudstream3.MovieSearchResponse
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.TvSeriesSearchResponse
+import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 
-private enum class ImgState { Loading, Loaded, Error }
-
+/**
+ * Poster card used throughout the home, search, and library screens.
+ *
+ * Features:
+ * - 2:3 aspect ratio (standard movie poster)
+ * - Shimmer placeholder while the image loads
+ * - Subtle press-scale animation (0.96f) for tactile feedback
+ * - Optional quality badge in the top-left corner
+ */
 @Composable
 fun PosterCard(
-    item: SearchResponse,
-    onClick: () -> Unit,
+    title: String,
+    posterUrl: String?,
     modifier: Modifier = Modifier,
-    horizontal: Boolean = false,
+    quality: String? = null,
+    onClick: () -> Unit = {},
 ) {
-    val aspectRatio = if (horizontal) 16f / 9f else 2f / 3f
-    val width = if (horizontal) 240.dp else 120.dp
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "cardScale",
-    )
-    var imgState by remember { mutableStateOf(ImgState.Loading) }
+    var pressed by remember { mutableStateOf(false) }
+    val scale = if (pressed) 0.96f else 1f
 
     Column(
         modifier = modifier
-            .width(width)
             .scale(scale)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(4.dp),
+            .clip(RoundedCornerShape(12.dp))
+            .clickable {
+                pressed = true
+                onClick()
+            },
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(aspectRatio)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(12.dp)),
         ) {
-            if (!item.posterUrl.isNullOrBlank()) {
-                val painter = rememberAsyncImagePainter(
-                    model = item.posterUrl,
-                    onSuccess = { imgState = ImgState.Loaded },
-                    onError = { imgState = ImgState.Error },
-                )
-                Image(
-                    painter = painter,
-                    contentDescription = item.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-                when (imgState) {
-                    ImgState.Loading -> ShimmerBox(Modifier.fillMaxSize())
-                    ImgState.Error -> Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.BrokenImage,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    ImgState.Loaded -> { }
-                }
-            } else {
+            // Track image state so we can show a shimmer overlay until the
+            // image is successfully loaded.
+            var imageState by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
+
+            // Show shimmer while loading, on error, or before request starts
+            when (imageState) {
+                is AsyncImagePainter.State.Loading,
+                is AsyncImagePainter.State.Error,
+                is AsyncImagePainter.State.Empty -> ShimmerBox(modifier = Modifier.fillMaxSize())
+                else -> Unit
+            }
+
+            // Render the actual image on top — once it's loaded, the shimmer
+            // below is covered.
+            AsyncImage(
+                model = posterUrl,
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                onState = { imageState = it },
+            )
+
+            if (quality != null) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .align(Alignment.TopStart),
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    Text(
+                        text = quality,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
             }
-
-            if (isPressed) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)),
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
-                        ),
-                    ),
-            )
         }
-
-        Spacer(Modifier.height(4.dp))
-
+        Spacer(Modifier.height(6.dp))
         Text(
-            text = item.name,
+            text = title,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Medium,
         )
-
-        val subtitle = when (item) {
-            is MovieSearchResponse -> item.year?.toString()
-            is TvSeriesSearchResponse -> item.year?.toString()
-            is AnimeSearchResponse -> item.otherName
-            else -> null
-        }
-        subtitle?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }
 
+/**
+ * Shimmer placeholder used by [PosterCard] while images load.
+ */
 @Composable
-fun ShimmerBox(modifier: Modifier = Modifier) {
+fun ShimmerBox(
+    modifier: Modifier = Modifier,
+) {
     val transition = rememberInfiniteTransition(label = "shimmer")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
+    val translate by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = tween(1100),
+            repeatMode = RepeatMode.Restart,
         ),
-        label = "shimmerAlpha",
+        label = "shimmer-translate",
     )
+
+    val baseColor = MaterialTheme.colorScheme.surfaceVariant
+    val highlightColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+
+    val brush: Brush = Brush.linearGradient(
+        colors = listOf(
+            baseColor,
+            highlightColor,
+            baseColor,
+        ),
+        start = androidx.compose.ui.geometry.Offset(
+            x = -300f + translate * 600f,
+            y = 0f,
+        ),
+        end = androidx.compose.ui.geometry.Offset(
+            x = translate * 600f,
+            y = 100f,
+        ),
+    )
+
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)),
+            .background(brush),
     )
 }

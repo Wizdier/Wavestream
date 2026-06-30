@@ -7,13 +7,20 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
-java { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }
+java {
+    toolchain { languageVersion.set(JavaLanguageVersion.of(17)) }
+}
+
 val javaTarget = JvmTarget.fromTarget("17")
 
 kotlin {
     androidTarget()
-    jvm("desktop") { compilerOptions { freeCompilerArgs.add("-Xjvm-default=all") } }
-    compilerOptions { freeCompilerArgs.addAll("-Xexpect-actual-classes", "-Xannotation-default-target=param-property") }
+    jvm("desktop") {
+        compilerOptions { freeCompilerArgs.add("-Xjvm-default=all") }
+    }
+    compilerOptions {
+        freeCompilerArgs.addAll("-Xexpect-actual-classes", "-Xannotation-default-target=param-property")
+    }
     sourceSets {
         all {
             languageSettings {
@@ -53,4 +60,5 @@ android {
     defaultConfig { minSdk = 21 }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
+
 tasks.withType<KotlinJvmCompile> { compilerOptions { jvmTarget.set(javaTarget) } }

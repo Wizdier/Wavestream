@@ -2720,7 +2720,8 @@ fun isUpcoming(dateString: String?): Boolean {
         val kotlinxInstant = runCatching { components.toInstantUsingOffset() }
             .recoverCatching { components.toLocalDateTime().toInstant(TimeZone.currentSystemDefault()) }
             .getOrElse { components.toLocalDate().atStartOfDayIn(TimeZone.currentSystemDefault()) }
-        val nowMs = Clock.System.now().toEpochMilliseconds(); nowMs < kotlinxInstant.toEpochMilliseconds()
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+        nowMs < kotlinxInstant.toEpochMilliseconds()
     }.onFailure { logError(it) }.getOrElse { false }
 }
 

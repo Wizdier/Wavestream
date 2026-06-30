@@ -2,180 +2,100 @@ package com.wavestream
 
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.plugins.PluginManager
-import com.lagradost.cloudstream3.plugins.RepositoryData
-import com.lagradost.cloudstream3.plugins.RepositoryManager
-import com.lagradost.cloudstream3.utils.extractorApis
-import com.wavestream.stremio.StremioAddonRepository
+import com.wavestream.platform.wavePlatform
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
-private const val FIRST_LAUNCH_KEY = "wavestream_first_launch_done_v3"
-
+/**
+ * Single source of truth for app boot state. UI observes [bootState] to know
+ * when it can render real data vs. a loading screen.
+ *
+ * Boot is idempotent — calling [initialize] twice is safe. The second call
+ * is a no-op once boot has started.
+ */
 object WaveAppInit {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var initialized = false
 
-    private val _initState = MutableStateFlow<InitState>(InitState.Idle)
-    val initState: StateFlow<InitState> = _initState.asStateFlow()
-
-    private val _logs = MutableStateFlow<List<LogEntry>>(emptyList())
-    val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
-
-    fun log(message: String, level: LogLevel = LogLevel.Info) {
-        println("[WaveAppInit] $message")
-        val current = _logs.value.toMutableList()
-        current.add(LogEntry(System.currentTimeMillis(), level, message))
-        if (current.size > 500) current.removeAt(0)
-        _logs.value = current
+    enum class BootStage {
+        NOT_STARTED,
+        LOADING_PLUGINS,
+        READY,
+        FAILED,
+        ;
+        val isReady: Boolean get() = this == READY
     }
 
-    fun initialize(pluginsDir: File, isSafeMode: Boolean = false) {
-        if (initialized) return
-        initialized = true
+    data class BootState(
+        val stage: BootStage = BootStage.NOT_STARTED,
+        val message: String? = null,
+        val pluginsLoaded: Int = 0,
+    )
 
-        if (isSafeMode) {
-            log("Safe mode active")
-            _initState.value = InitState.SafeMode
-            return
-        }
+    private val _bootState = MutableStateFlow(BootState())
+    val bootState: StateFlow<BootState> = _bootState.asStateFlow()
 
-        scope.launch {
-            _initState.value = InitState.Loading("Starting")
+    private val bootScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile private var bootStarted = false
+
+    /**
+     * Wires the persistent store into the library's RepositoryManager, then
+     * loads all plugins from the extensions directory.
+     *
+     * @param extensionsDir Override for the extensions directory; defaults
+     *        to [wavePlatform.extensionsDir]. The MainActivity in the guide
+     *        passes `File(filesDir, "Extensions")` here, which matches the
+     *        platform default.
+     */
+    fun initialize(extensionsDir: File? = null) {
+        if (bootStarted) return
+        bootStarted = true
+
+        RepositoryStore.install()
+
+        val dir = extensionsDir ?: wavePlatform.extensionsDir
+        _bootState.value = BootState(BootStage.LOADING_PLUGINS, "Loading extensions…")
+
+        bootScope.launch {
             try {
-                seedDefaultsIfFirstLaunch()
-
-                _initState.value = InitState.Loading("Loading Stremio addons")
-                StremioAddonRepository.initializeAll()
-                delay(500)
-
-                _initState.value = InitState.Loading("Loading plugins")
-                if (pluginsDir.exists()) {
-                    PluginManager.loadAllFromDirectory(pluginsDir)
-                } else {
-                    pluginsDir.mkdirs()
-                }
-
-                _initState.value = InitState.Loading("Fetching repositories")
-                loadRepositories(pluginsDir)
-
+                PluginManager.loadAllFromDirectory(dir)
                 APIHolder.initAll()
-                val providerCount = APIHolder.allProviders.size
-                val extractorCount = extractorApis.size
-                log("Done: $providerCount providers, $extractorCount extractors")
-                _initState.value = InitState.Ready(providerCount, extractorCount)
-            } catch (e: Throwable) {
-                log("Init failed: ${e.message}", LogLevel.Error)
-                _initState.value = InitState.Error(e.message ?: "Unknown")
-            }
-        }
-    }
 
-    private suspend fun seedDefaultsIfFirstLaunch() {
-        if (PlatformStorage.getString(FIRST_LAUNCH_KEY) == "true") return
-        log("First launch: seeding defaults")
-        runCatching {
-            StremioAddonRepository.addAddon("https://v3-cinemeta.strem.io/manifest.json")
-            log("Added Cinemeta Stremio addon")
-        }.onFailure {
-            log("Cinemeta failed: ${it.message}", LogLevel.Warning)
-        }
-        PlatformStorage.putString(FIRST_LAUNCH_KEY, "true")
-    }
-
-    private suspend fun loadRepositories(pluginsDir: File) {
-        val repos = RepositoryStore.getRepositories()
-        if (repos.isEmpty()) return
-
-        val allPlugins: List<Pair<String, List<com.lagradost.cloudstream3.plugins.SitePlugin>>> =
-            coroutineScope {
-                repos.map { repo ->
-                    async {
-                        try {
-                            log("Fetching: ${repo.name.ifBlank { repo.url }}")
-                            val plugins = RepositoryManager.getRepoPlugins(repo.url) ?: emptyList()
-                            log("Repository has ${plugins.size} plugins")
-                            repo.url to plugins
-                        } catch (e: Throwable) {
-                            log("Failed: ${repo.url}", LogLevel.Error)
-                            repo.url to emptyList()
-                        }
-                    }
-                }.awaitAll()
-            }
-
-        for ((repoUrl, plugins) in allPlugins) {
-            for (plugin in plugins) {
-                if (plugin.url.isBlank() && plugin.jarUrl.isNullOrBlank()) continue
-                if (plugin.status == 0) continue
-
-                val repoFolder = File(pluginsDir, RepositoryManager.getRepoFolderName(repoUrl))
-                val pluginFile = File(repoFolder, RepositoryManager.getPluginFileName(plugin.internalName))
-
-                if (pluginFile.exists()) {
-                    if (!PluginManager.plugins.containsKey(pluginFile.absolutePath)) {
-                        PluginManager.loadPlugin(pluginFile, repoUrl)
-                    }
-                    continue
-                }
-
-                log("Downloading: ${plugin.name}")
-                val downloaded = RepositoryManager.downloadPluginToFile(
-                    plugin.bestUrlForPlatform(),
-                    pluginFile,
-                    plugin.bestHashForPlatform(),
+                val count = PluginManager.plugins.size
+                _bootState.value = BootState(
+                    stage = BootStage.READY,
+                    message = if (count == 0) "No extensions installed" else "Loaded $count extensions",
+                    pluginsLoaded = count,
                 )
-                if (downloaded != null) {
-                    if (PluginManager.loadPlugin(downloaded, repoUrl)) {
-                        log("Installed: ${plugin.name}")
-                    } else {
-                        log("Load failed: ${plugin.name}", LogLevel.Error)
-                    }
-                } else {
-                    log("Download failed: ${plugin.name}", LogLevel.Error)
-                }
+            } catch (e: Throwable) {
+                _bootState.value = BootState(
+                    stage = BootStage.FAILED,
+                    message = e.message ?: "Unknown boot error",
+                )
             }
         }
     }
 
-    fun refreshRepositories(pluginsDir: File) {
-        scope.launch {
-            _initState.value = InitState.Loading("Refreshing")
-            loadRepositories(pluginsDir)
-            APIHolder.initAll()
-            _initState.value = InitState.Ready(
-                APIHolder.allProviders.size,
-                extractorApis.size,
-            )
+    /** Re-scan the extensions dir and reload plugins. Useful after installing a new repo. */
+    fun rescan() {
+        val dir = wavePlatform.extensionsDir
+        bootScope.launch {
+            _bootState.value = _bootState.value.copy(stage = BootStage.LOADING_PLUGINS, message = "Reloading…")
+            try {
+                PluginManager.loadAllFromDirectory(dir)
+                APIHolder.initAll()
+                _bootState.value = BootState(
+                    stage = BootStage.READY,
+                    message = "Loaded ${PluginManager.plugins.size} extensions",
+                    pluginsLoaded = PluginManager.plugins.size,
+                )
+            } catch (e: Throwable) {
+                _bootState.value = _bootState.value.copy(stage = BootStage.FAILED, message = e.message)
+            }
         }
     }
-
-    fun getDefaultPluginsDir(): File = getDefaultPluginsDirPlatform()
 }
-
-sealed class InitState {
-    object Idle : InitState()
-    data class Loading(val message: String) : InitState()
-    data class Ready(val providerCount: Int, val extractorCount: Int) : InitState()
-    data class Error(val message: String) : InitState()
-    object SafeMode : InitState()
-}
-
-enum class LogLevel { Info, Warning, Error }
-
-data class LogEntry(
-    val timestamp: Long,
-    val level: LogLevel,
-    val message: String,
-)
-
-expect fun getDefaultPluginsDirPlatform(): File

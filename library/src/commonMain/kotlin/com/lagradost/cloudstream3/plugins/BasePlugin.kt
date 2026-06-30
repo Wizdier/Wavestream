@@ -14,17 +14,23 @@ abstract class BasePlugin {
         val version: Int? = null,
         val apiVersion: Int = 1,
     )
+
     var filename: String? = null
     var sourceUrl: String? = null
     var version: Int = PluginManager.PLUGIN_VERSION_NOT_SET
+
     open fun beforeUnload() {}
     open fun load() {}
+
     fun registerMainAPI(element: MainAPI) {
+        println("[Plugin] Adding ${element.name} (${element.mainUrl})")
         element.sourcePlugin = this.filename
         com.lagradost.cloudstream3.APIHolder.addPluginMapping(element)
         com.lagradost.cloudstream3.APIHolder.allProviders.add(element)
     }
+
     fun registerExtractorAPI(element: ExtractorApi) {
+        println("[Plugin] Adding ${element.name} (${element.mainUrl})")
         element.sourcePlugin = this.filename
         extractorApis.add(element)
     }
@@ -32,4 +38,8 @@ abstract class BasePlugin {
 
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class CloudstreamPlugin(val name: String = "", val version: Int = 1, val requiresResources: Boolean = false)
+annotation class CloudstreamPlugin(
+    val name: String = "",
+    val version: Int = 1,
+    val requiresResources: Boolean = false,
+)

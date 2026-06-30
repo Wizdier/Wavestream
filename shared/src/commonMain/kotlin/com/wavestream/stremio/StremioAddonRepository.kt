@@ -1,502 +1,291 @@
 package com.wavestream.stremio
 
-import com.lagradost.cloudstream3.APIHolder
-import com.lagradost.cloudstream3.Episode
-import com.lagradost.cloudstream3.HomePageList
-import com.lagradost.cloudstream3.HomePageResponse
-import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.MainPageData
-import com.lagradost.cloudstream3.MainPageRequest
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.APIHolder
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.isMovieType
-import com.lagradost.cloudstream3.newEpisode
-import com.lagradost.cloudstream3.newHomePageResponse
-import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newTvSeriesSearchResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
-import com.lagradost.cloudstream3.utils.AtomicMutableList
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
+import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.mvvm.logError
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
-import java.util.concurrent.ConcurrentHashMap
 
-@Serializable
-data class StremioManifest(
-    val id: String = "",
-    val name: String,
-    val description: String = "",
-    val version: String = "",
-    val logo: String? = null,
-    val resources: List<StremioResource> = emptyList(),
-    val types: List<String> = emptyList(),
-    val catalogs: List<StremioCatalog> = emptyList(),
-)
-
-@Serializable
-data class StremioResource(
-    val name: String,
-    val types: List<String> = emptyList(),
-    val idPrefixes: List<String> = emptyList(),
-)
-
-@Serializable
-data class StremioCatalog(
-    val type: String,
-    val id: String,
-    val name: String = "",
-    val extra: List<StremioExtra> = emptyList(),
-)
-
-@Serializable
-data class StremioExtra(
-    val name: String,
-    val isRequired: Boolean = false,
-    val options: List<String> = emptyList(),
-)
-
+/**
+ * Minimal Stremio addon client. Stremio addons expose a JSON catalog at
+ * `/<addon>/catalog/<type>/<id>.json` and stream metadata at
+ * `/<addon>/stream/<type>/<id>.json`. We wrap a single addon URL as a
+ * CloudStream [MainAPI] provider so the rest of the app can treat it
+ * identically to native CS providers.
+ *
+ * Spec reference: https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/requests.md
+ */
 @Serializable
 data class StremioMetaPreview(
     val id: String,
-    val type: String,
     val name: String,
+    val type: String? = null,
     val poster: String? = null,
-    val releaseInfo: String? = null,
-    val imdbRating: String? = null,
-    val genres: List<String> = emptyList(),
-)
-
-@Serializable
-data class StremioCatalogResponse(
-    val metas: List<StremioMetaPreview> = emptyList(),
-)
-
-@Serializable
-data class StremioMetaFull(
-    val id: String,
-    val type: String,
-    val name: String,
-    val poster: String? = null,
-    val background: String? = null,
+    val posterShape: String? = null,
     val description: String? = null,
     val releaseInfo: String? = null,
+    val imdbRating: String? = null,
     val runtime: String? = null,
-    val genres: List<String> = emptyList(),
-    val videos: List<StremioVideo> = emptyList(),
+    val genres: List<String>? = null,
 )
 
 @Serializable
-data class StremioMetaResponse(
-    val meta: StremioMetaFull,
-)
-
-@Serializable
-data class StremioVideo(
+data class StremioMeta(
     val id: String,
-    val title: String = "",
+    val name: String,
+    val type: String? = null,
+    val poster: String? = null,
+    val posterShape: String? = null,
+    val background: String? = null,
+    val logo: String? = null,
+    val description: String? = null,
+    val releaseInfo: String? = null,
+    val imdbRating: String? = null,
+    val runtime: String? = null,
+    val genres: List<String>? = null,
+    val director: List<StremioCrew>? = null,
+    val cast: List<StremioCrew>? = null,
+    val videos: List<StremioEpisode>? = null,
+)
+
+@Serializable
+data class StremioCrew(val name: String? = null)
+
+@Serializable
+data class StremioEpisode(
+    val id: String,
+    val title: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
-    val overview: String? = null,
     val thumbnail: String? = null,
+    val overview: String? = null,
+    val released: String? = null,
 )
+
+@Serializable
+data class StremioCatalogResponse(val metas: List<StremioMetaPreview> = emptyList())
 
 @Serializable
 data class StremioStream(
     val name: String? = null,
     val title: String? = null,
     val url: String? = null,
+    val description: String? = null,
+    val ytId: String? = null,
     val externalUrl: String? = null,
-    val behaviorHints: StremioStreamBehaviorHints? = null,
-    val subtitles: List<StremioSubtitle> = emptyList(),
+    val behaviorHints: StremioBehaviorHints? = null,
 )
 
 @Serializable
-data class StremioStreamBehaviorHints(
-    val proxyHeaders: StremioProxyHeaders? = null,
+data class StremioBehaviorHints(
+    val notWebReady: Boolean? = null,
+    val bingeGroup: String? = null,
+    val countryWhitelist: List<String>? = null,
+    val proxyHeaders: Map<String, String>? = null,
 )
 
 @Serializable
-data class StremioProxyHeaders(
-    val request: Map<String, String>? = null,
-)
+data class StremioStreamResponse(val streams: List<StremioStream> = emptyList())
 
-@Serializable
-data class StremioSubtitle(
-    val url: String,
-    val lang: String? = null,
-    val label: String? = null,
-)
+/**
+ * Repository of installed Stremio addons. Each addon URL becomes a
+ * [StremioProviderAdapter] registered in APIHolder.
+ */
+object StremioAddonRepository {
+    private const val PREF_KEY = "wavestream.stremio.addons"
+    private val json = Json { ignoreUnknownKeys = true }
 
-@Serializable
-data class StremioStreamsResponse(
-    val streams: List<StremioStream> = emptyList(),
-)
+    var listeners: MutableList<() -> Unit> = mutableListOf()
 
-@Serializable
-data class StoredStremioAddon(
-    val manifestUrl: String,
-    val name: String = "",
-    val enabled: Boolean = true,
-)
-
-class StremioAddonClient(
-    val manifestUrl: String,
-    private val json: Json = Json { ignoreUnknownKeys = true },
-) {
-    val baseUrl: String = manifestUrl.substringBefore("?").removeSuffix("/manifest.json")
-    val query: String = manifestUrl.substringAfter("?", "").let { if (it.isBlank()) "" else "?$it" }
-
-    suspend fun getManifest(): StremioManifest? {
-        return try {
-            json.decodeFromString<StremioManifest>(app.get(manifestUrl).text)
-        } catch (e: Throwable) {
-            println("[Stremio] Manifest fetch failed: ${e.message}")
-            null
-        }
+    /** Returns the list of installed addon URLs. */
+    fun listAddons(): List<String> {
+        val raw = com.wavestream.platform.wavePlatform.preferences.getString(PREF_KEY) ?: return emptyList()
+        return runCatching { json.decodeFromString<List<String>>(raw) }.getOrElse { emptyList() }
     }
 
-    fun buildUrl(resource: String, type: String, id: String, extra: Map<String, String> = emptyMap()): String {
-        val sb = StringBuilder("$baseUrl/$resource/$type/${encode(id)}.json$query")
-        if (extra.isNotEmpty()) {
-            sb.append(if (sb.contains("?")) "&" else "?")
-            extra.entries.joinTo(sb, "&") { "${encode(it.key)}=${encode(it.value)}" }
-        }
-        return sb.toString()
+    fun addAddon(url: String) {
+        val current = listAddons().toMutableList()
+        if (url in current) return
+        current.add(url)
+        com.wavestream.platform.wavePlatform.preferences.putString(PREF_KEY, json.encodeToString(current))
+        listeners.forEach { it() }
     }
 
-    suspend fun getCatalog(type: String, id: String, extra: Map<String, String> = emptyMap()): List<StremioMetaPreview> {
-        return try {
-            json.decodeFromString<StremioCatalogResponse>(app.get(buildUrl("catalog", type, id, extra)).text).metas
-        } catch (e: Throwable) {
-            emptyList()
-        }
+    fun removeAddon(url: String) {
+        val current = listAddons().toMutableList()
+        current.remove(url)
+        com.wavestream.platform.wavePlatform.preferences.putString(PREF_KEY, json.encodeToString(current))
+        listeners.forEach { it() }
     }
 
-    suspend fun getMeta(type: String, id: String): StremioMetaFull? {
-        return try {
-            json.decodeFromString<StremioMetaResponse>(app.get(buildUrl("meta", type, id)).text).meta
-        } catch (e: Throwable) {
-            null
+    /**
+     * Re-registers all installed Stremio addons as CloudStream providers.
+     * Call after plugins load and after every add/remove operation.
+     */
+    fun syncProviders() {
+        val existing = APIHolder.allProviders.withLock {
+            APIHolder.allProviders.filterIsInstance<StremioProviderAdapter>()
         }
-    }
-
-    suspend fun getStreams(type: String, id: String): List<StremioStream> {
-        return try {
-            json.decodeFromString<StremioStreamsResponse>(app.get(buildUrl("stream", type, id)).text).streams
-        } catch (e: Throwable) {
-            emptyList()
-        }
-    }
-
-    private fun encode(s: String): String = buildString {
-        for (byte in s.toByteArray()) {
-            val v = byte.toInt() and 0xFF
-            val c = v.toChar()
-            if (c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '-' || c == '_' || c == '.' || c == '~') {
-                append(c)
-            } else {
-                append('%')
-                append("0123456789ABCDEF"[v shr 4])
-                append("0123456789ABCDEF"[v and 0x0F])
+        // Remove existing Stremio providers (AtomicList doesn't expose
+        // minusAssign directly; we iterate and remove explicitly).
+        existing.forEach { provider ->
+            APIHolder.allProviders.withLock {
+                val iter = APIHolder.allProviders.iterator()
+                while (iter.hasNext()) {
+                    if (iter.next() === provider) {
+                        iter.remove()
+                        break
+                    }
+                }
             }
+        }
+
+        for (url in listAddons()) {
+            val provider = StremioProviderAdapter(url)
+            APIHolder.allProviders.withLock { APIHolder.allProviders.add(provider) }
         }
     }
 }
 
+/**
+ * Wraps a Stremio addon as a CloudStream [MainAPI] provider.
+ *
+ * The addon's root URL (e.g. `https://example.com/stremio/addon`) becomes
+ * the provider's [mainUrl]. Calls to [search] hit `catalog/<type>/<id>.json`
+ * with the query as a search parameter, and [load] fetches full metadata
+ * plus stream links.
+ *
+ * Stream URLs returned by Stremio that start with `stremio:` (deep links)
+ * are passed through `fixUrl` unchanged — the patch we applied to MainAPI
+ * makes that possible.
+ */
 class StremioProviderAdapter(
-    val manifestUrl: String,
-    val manifest: StremioManifest,
+    addonUrl: String,
 ) : MainAPI() {
-    private val client = StremioAddonClient(manifestUrl)
 
-    override var name = manifest.name.ifBlank { "Stremio" }
-    override var mainUrl = client.baseUrl
-    override val hasMainPage = manifest.catalogs.isNotEmpty()
-    override val hasDownloadSupport = false
+    override var name: String = "Stremio"
+    override var mainUrl: String = addonUrl.trimEnd('/')
+    override val hasMainPage: Boolean = true
+    override val hasQuickSearch: Boolean = false
 
-    override val mainPage: List<MainPageData> = manifest.catalogs.map { catalog ->
-        MainPageData(
-            name = catalog.name.ifBlank { "${catalog.type}/${catalog.id}" },
-            data = "${catalog.type}/${catalog.id}",
-            horizontalImages = false,
-        )
-    }
+    private val json = Json { ignoreUnknownKeys = true }
 
-    override val supportedTypes: Set<TvType> = manifest.types.mapNotNull { typeStr ->
-        when (typeStr.lowercase()) {
-            "movie" -> TvType.Movie
-            "series" -> TvType.TvSeries
-            "anime" -> TvType.Anime
-            else -> null
+    init {
+        // Derive a friendlier name from the addon URL host.
+        runCatching {
+            val host = mainUrl.substringAfter("://").substringBefore("/")
+            name = "Stremio: $host"
         }
-    }.toSet().ifEmpty { setOf(TvType.Movie, TvType.TvSeries) }
-
-    private fun encodeUrl(type: String, id: String): String = "stremio:$type:$id"
-
-    private fun decodeUrl(url: String): Pair<String, String>? {
-        if (!url.startsWith("stremio:")) return null
-        val rest = url.removePrefix("stremio:")
-        val idx = rest.indexOf(':')
-        if (idx <= 0 || idx >= rest.length - 1) return null
-        return rest.substring(0, idx) to rest.substring(idx + 1)
     }
 
-    private fun mapType(type: String): TvType = when (type.lowercase()) {
-        "movie" -> TvType.Movie
-        "series" -> TvType.TvSeries
-        "anime" -> TvType.Anime
-        else -> TvType.Movie
-    }
+    private fun catalogUrl(type: String, id: String = "top"): String =
+        "$mainUrl/catalog/$type/$id.json"
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        val parts = request.data.split("/", limit = 2)
-        if (parts.size < 2) return null
-        val type = parts[0]
-        val catalogId = parts[1]
+    private fun streamUrl(type: String, id: String): String =
+        "$mainUrl/stream/$type/$id.json"
 
-        val extra = if (page > 1) mapOf("page" to page.toString()) else emptyMap()
-        val metas = client.getCatalog(type, catalogId, extra)
-        val items = metas.map { meta ->
-            newMovieSearchResponse(
-                name = meta.name,
-                url = encodeUrl(meta.type, meta.id),
-                type = mapType(meta.type),
-                fix = false,
-            ) {
-                this.posterUrl = meta.poster
-                this.year = meta.releaseInfo?.substringBefore("-")?.toIntOrNull()
-            }
+    private suspend fun fetchCatalog(type: String): List<StremioMetaPreview> {
+        return try {
+            val response = app.get(catalogUrl(type))
+            json.decodeFromString(StremioCatalogResponse.serializer(), response.text).metas
+        } catch (e: Throwable) {
+            logError(e)
+            emptyList()
         }
-        return newHomePageResponse(
-            list = listOf(HomePageList(request.name, items, false)),
-            hasNext = items.size >= 20,
-        )
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        val results = mutableListOf<SearchResponse>()
-        for (catalog in manifest.catalogs) {
-            if (catalog.extra.none { it.name == "search" }) continue
-            val metas = client.getCatalog(catalog.type, catalog.id, mapOf("search" to query))
-            metas.forEach { meta ->
-                results.add(newMovieSearchResponse(
-                    name = meta.name,
-                    url = encodeUrl(meta.type, meta.id),
-                    type = mapType(meta.type),
-                    fix = false,
-                ) {
-                    this.posterUrl = meta.poster
-                })
+        return try {
+            val metas = (fetchCatalog("movie") + fetchCatalog("series"))
+                .filter { it.name.contains(query, ignoreCase = true) }
+            metas.map { meta ->
+                val tvType = if (meta.type == "series") TvType.TvSeries else TvType.Movie
+                if (tvType == TvType.Movie) {
+                    newMovieSearchResponse(meta.name, "stremio://movie/${meta.id}", tvType) {
+                        posterUrl = meta.poster
+                    }
+                } else {
+                    newTvSeriesSearchResponse(meta.name, "stremio://series/${meta.id}", tvType) {
+                        posterUrl = meta.poster
+                    }
+                }
             }
+        } catch (e: Throwable) {
+            logError(e)
+            null
         }
-        return results.distinctBy { it.url }
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val (type, id) = decodeUrl(url) ?: return null
-        val meta = client.getMeta(type, id) ?: return null
-        val itemType = mapType(meta.type)
+        // url is a stremio:// link we synthesized in [search]
+        val stremioLink = url.removePrefix("stremio://")
+        val parts = stremioLink.split("/", limit = 3)
+        if (parts.size < 3) return null
+        val (type, id) = parts
+        val resolvedType = if (type == "series") "series" else "movie"
 
-        return if (itemType.isMovieType()) {
-            newMovieLoadResponse(meta.name, url, itemType, url) {
-                this.posterUrl = meta.poster
-                this.plot = meta.description
-                this.year = meta.releaseInfo?.substringBefore("-")?.toIntOrNull()
-                this.tags = meta.genres
-                this.duration = meta.runtime?.toIntOrNull()
-            }
-        } else {
-            val episodes = meta.videos.map { video ->
-                newEpisode("stremio:${meta.type}:${video.id}", {
-                    this.name = video.title
-                    this.season = video.season
-                    this.episode = video.episode
-                    this.posterUrl = video.thumbnail
-                    this.description = video.overview
-                }, fix = false)
-            }
-            newTvSeriesLoadResponse(meta.name, url, itemType, episodes) {
-                this.posterUrl = meta.poster
-                this.plot = meta.description
-                this.year = meta.releaseInfo?.substringBefore("-")?.toIntOrNull()
-                this.tags = meta.genres
-            }
-        }
-    }
-
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
-        val (type, id) = decodeUrl(data) ?: return false
-        val streams = client.getStreams(type, id)
-        for (stream in streams) {
-            if (stream.url != null) {
-                val linkType = when {
-                    stream.url.contains(".m3u8") -> ExtractorLinkType.M3U8
-                    stream.url.contains(".mpd") -> ExtractorLinkType.DASH
-                    else -> ExtractorLinkType.VIDEO
-                }
-                val proxyHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
-                callback(newExtractorLink(
-                    source = manifest.name,
-                    name = stream.name ?: stream.title ?: "Stream",
-                    url = stream.url,
-                    type = linkType,
-                ) {
-                    this.quality = Qualities.Unknown.value
-                    this.headers = proxyHeaders
-                    this.referer = proxyHeaders["referer"] ?: ""
-                })
-            } else if (stream.externalUrl != null) {
-                callback(newExtractorLink(
-                    source = manifest.name,
-                    name = stream.name ?: "External",
-                    url = stream.externalUrl,
-                    type = ExtractorLinkType.VIDEO,
-                ) {
-                    this.quality = Qualities.Unknown.value
-                })
-            }
-            stream.subtitles.forEach { sub ->
-                subtitleCallback(SubtitleFile(sub.lang ?: sub.label ?: "en", sub.url))
-            }
-        }
-        return streams.isNotEmpty()
-    }
-}
-
-object StremioAddonRepository {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = false
-        explicitNulls = false
-    }
-
-    private val _addons = MutableStateFlow<List<StoredStremioAddon>>(emptyList())
-    val addons: StateFlow<List<StoredStremioAddon>> = _addons
-
-    private val _manifests = MutableStateFlow<Map<String, StremioManifest>>(emptyMap())
-    val manifests: StateFlow<Map<String, StremioManifest>> = _manifests
-
-    private val _adapters = ConcurrentHashMap<String, StremioProviderAdapter>()
-
-    private const val ADDONS_KEY = "stremio_addons_v3"
-    private val serializer = ListSerializer(StoredStremioAddon.serializer())
-
-    init {
-        loadFromStorage()
-    }
-
-    private fun loadFromStorage() {
-        val raw = com.wavestream.PlatformStorage.getString(ADDONS_KEY) ?: return
-        _addons.value = runCatching {
-            json.decodeFromString(serializer, raw)
-        }.getOrDefault(emptyList())
-    }
-
-    private fun persist() {
-        com.wavestream.PlatformStorage.putString(ADDONS_KEY, json.encodeToString(serializer, _addons.value))
-    }
-
-    suspend fun addAddon(manifestUrl: String): Result<StremioManifest> {
-        val url = manifestUrl.trim().let {
-            if (it.startsWith("stremio://")) it.replace("stremio://", "https://") else it
-        }
-        if (_addons.value.any { it.manifestUrl == url }) {
-            return Result.failure(IllegalStateException("Already added"))
-        }
-        return try {
-            val manifest = StremioAddonClient(url, json).getManifest()
-                ?: return Result.failure(IllegalStateException("Fetch failed"))
-
-            _addons.value = _addons.value + StoredStremioAddon(url, manifest.name, true)
-            persist()
-
-            _manifests.value = _manifests.value.toMutableMap().also { it[url] = manifest }
-            register(url, manifest)
-            Result.success(manifest)
+        val meta = try {
+            val metaResp = app.get("$mainUrl/meta/$resolvedType/$id.json")
+            json.decodeFromString(StremioMeta.serializer(), metaResp.text)
         } catch (e: Throwable) {
-            Result.failure(e)
+            logError(e); return null
         }
-    }
 
-    fun removeAddon(manifestUrl: String) {
-        val url = manifestUrl.trim().let {
-            if (it.startsWith("stremio://")) it.replace("stremio://", "https://") else it
+        val streams = try {
+            val sResp = app.get(streamUrl(resolvedType, id))
+            json.decodeFromString(StremioStreamResponse.serializer(), sResp.text).streams
+        } catch (e: Throwable) {
+            logError(e); emptyList()
         }
-        _addons.value = _addons.value.filterNot { it.manifestUrl == url }
-        _manifests.value = _manifests.value.toMutableMap().also { it.remove(url) }
-        persist()
-        _adapters.remove(url)?.let { removeFromLists(it) }
-    }
 
-    fun toggleAddon(manifestUrl: String) {
-        val url = manifestUrl.trim().let {
-            if (it.startsWith("stremio://")) it.replace("stremio://", "https://") else it
-        }
-        _addons.value = _addons.value.map {
-            if (it.manifestUrl == url) it.copy(enabled = !it.enabled) else it
-        }
-        persist()
-
-        val addon = _addons.value.firstOrNull { it.manifestUrl == url } ?: return
-        if (!addon.enabled) {
-            _adapters.remove(url)?.let { removeFromLists(it) }
-        } else {
-            _manifests.value[url]?.let { manifest ->
-                MainScope().launch { register(url, manifest) }
+        // Pack the first playable stream URL into the load response so the
+        // player can launch directly.
+        val firstStream = streams.firstOrNull { it.url != null }
+        val playableUrl = firstStream?.url ?: ""
+        return when (resolvedType) {
+            "movie" -> newMovieLoadResponse(
+                meta.name,
+                url,
+                TvType.Movie,
+                playableUrl,
+            ) {
+                this.posterUrl = meta.poster
+                this.plot = meta.description
+                this.year = meta.releaseInfo?.toIntOrNull()
+                this.backgroundPosterUrl = meta.background
+                this.logoUrl = meta.logo
             }
-        }
-    }
-
-    private fun register(url: String, manifest: StremioManifest) {
-        _adapters.remove(url)?.let { removeFromLists(it) }
-        val provider = StremioProviderAdapter(url, manifest)
-        _adapters[url] = provider
-        APIHolder.allProviders.add(provider)
-        APIHolder.addPluginMapping(provider)
-    }
-
-    private fun removeFromLists(provider: MainAPI) {
-        @Suppress("UNCHECKED_CAST")
-        val apis = APIHolder.apis as? AtomicMutableList<MainAPI> ?: return
-        @Suppress("UNCHECKED_CAST")
-        val provs = APIHolder.allProviders as? AtomicMutableList<MainAPI> ?: return
-
-        val apisToKeep = apis.toList().filter { it !== provider }
-        apis.clear()
-        apis.addAll(apisToKeep)
-
-        val provsToKeep = provs.toList().filter { it !== provider }
-        provs.clear()
-        provs.addAll(provsToKeep)
-    }
-
-    suspend fun initializeAll() {
-        for (addon in _addons.value) {
-            if (!addon.enabled) continue
-            try {
-                val manifest = StremioAddonClient(addon.manifestUrl, json).getManifest() ?: continue
-                _manifests.value = _manifests.value.toMutableMap().also {
-                    it[addon.manifestUrl] = manifest
+            else -> {
+                val episodes = (meta.videos ?: emptyList()).map { ep ->
+                    newEpisode(playableUrl) {
+                        this.name = ep.title
+                        this.season = ep.season
+                        this.episode = ep.episode
+                        this.posterUrl = ep.thumbnail
+                        this.description = ep.overview
+                    }
                 }
-                register(addon.manifestUrl, manifest)
-            } catch (e: Throwable) {
-                println("[Stremio] Init failed: ${addon.manifestUrl}")
+                newTvSeriesLoadResponse(
+                    meta.name,
+                    url,
+                    TvType.TvSeries,
+                    episodes,
+                ) {
+                    this.posterUrl = meta.poster
+                    this.plot = meta.description
+                    this.year = meta.releaseInfo?.toIntOrNull()
+                    this.backgroundPosterUrl = meta.background
+                    this.logoUrl = meta.logo
+                }
             }
         }
     }

@@ -1,19 +1,35 @@
 package com.wavestream
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavType
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import androidx.savedstate.read
+import com.wavestream.ui.components.LoadingIndicator
 import com.wavestream.ui.components.WaveBottomBar
-import com.wavestream.ui.theme.WaveStreamTheme
+import com.wavestream.ui.components.WaveTab
 import com.wavestream.ui.screens.details.DetailsScreen
 import com.wavestream.ui.screens.downloads.DownloadsScreen
 import com.wavestream.ui.screens.extensions.ExtensionsScreen
@@ -22,46 +38,180 @@ import com.wavestream.ui.screens.library.LibraryScreen
 import com.wavestream.ui.screens.player.PlayerScreen
 import com.wavestream.ui.screens.search.SearchScreen
 import com.wavestream.ui.screens.settings.SettingsScreen
+import com.wavestream.ui.theme.WaveTheme
 
-private fun String.urlEncode(): String {
-    val sb = StringBuilder()
-    for (byte in toByteArray()) {
-        val v = byte.toInt() and 0xFF; val c = v.toChar()
-        if (c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '-' || c == '_' || c == '.' || c == '~') sb.append(c)
-        else { sb.append('%'); sb.append("0123456789ABCDEF"[v shr 4]); sb.append("0123456789ABCDEF"[v and 0x0F]) }
+/**
+ * Root composable. Hosts the NavHost and bottom navigation bar.
+ *
+ * Routes:
+ * - `home`, `search`, `library`, `downloads`, `extensions` — bottom-nav tabs
+ * - `settings` — pushed from any top-app-bar gear icon
+ * - `details/{apiName}/{url}` — pushed when a poster is tapped
+ * - `player/{videoUrl}` — pushed when an episode / play is tapped
+ *
+ * Use [Routes] constants instead of string literals everywhere.
+ */
+object Routes {
+    const val HOME = "home"
+    const val SEARCH = "search"
+    const val LIBRARY = "library"
+    const val DOWNLOADS = "downloads"
+    const val EXTENSIONS = "extensions"
+    const val SETTINGS = "settings"
+    const val DETAILS = "details"
+    const val PLAYER = "player"
+}
+
+/**
+ * Side-channel for navigation arguments. The Compose-Multiplatform
+ * navigation library's `Bundle` doesn't expose `getString` on non-Android
+ * targets in this version, so we pass complex args through this singleton
+ * keyed by route. The NavHost clears each slot after reading.
+ */
+object NavArgs {
+    @Volatile var detailApiName: String? = null
+    @Volatile var detailUrl: String? = null
+    @Volatile var playerUrl: String? = null
+
+    fun setDetail(apiName: String, url: String) {
+        detailApiName = apiName
+        detailUrl = url
     }
-    return sb.toString()
-}
-private fun String.urlDecode(): String {
-    val sb = StringBuilder(); var i = 0
-    while (i < length) { val c = this[i]; if (c == '%' && i + 2 < length) { sb.append(substring(i+1, i+3).toInt(16).toChar()); i += 3 } else { sb.append(c); i++ } }
-    return sb.toString()
-}
-private val mainRoutes = setOf("home", "search", "library", "downloads", "settings")
 
+    fun setPlayer(url: String) {
+        playerUrl = url
+    }
+
+    fun consumeDetail(): Pair<String, String> {
+        val a = detailApiName.orEmpty()
+        val u = detailUrl.orEmpty()
+        detailApiName = null
+        detailUrl = null
+        return a to u
+    }
+
+    fun consumePlayer(): String {
+        val u = playerUrl.orEmpty()
+        playerUrl = null
+        return u
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App() {
-    WaveStreamTheme(useDarkTheme = true) {
-        val navController = rememberNavController()
-        val currentBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = currentBackStackEntry?.destination?.route
-        Scaffold(modifier = Modifier.fillMaxSize(), bottomBar = { if (currentRoute in mainRoutes) { WaveBottomBar(currentRoute) { route -> navController.navigate(route) { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } } } }) { padding ->
-            NavHost(navController, "home", Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background)) {
-                composable("home") { HomeScreen({ a, u -> navController.navigate("details/${a.urlEncode()}/${u.urlEncode()}") }, { navController.navigate("search") { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } }) }
-                composable("search") { SearchScreen({ a, u -> navController.navigate("details/${a.urlEncode()}/${u.urlEncode()}") }) }
-                composable("library") { LibraryScreen({ a, u -> navController.navigate("details/${a.urlEncode()}/${u.urlEncode()}") }) }
-                composable("downloads") { DownloadsScreen({ u -> navController.navigate("player/local/${u.urlEncode()}") }) }
-                composable("settings") { SettingsScreen { navController.navigate("extensions") } }
-                composable("extensions") { ExtensionsScreen { navController.popBackStack() } }
-                composable("details/{apiName}/{url}", listOf(navArgument("apiName") { type = NavType.StringType }, navArgument("url") { type = NavType.StringType })) { e ->
-                    val a = e.arguments?.read { getStringOrNull("apiName") }?.urlDecode() ?: return@composable
-                    val u = e.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
-                    DetailsScreen(a, u, { lu, s -> navController.navigate("player/${s.urlEncode()}/${lu.urlEncode()}") }, { navController.popBackStack() }, { da, du -> navController.navigate("details/${da.urlEncode()}/${du.urlEncode()}") })
+    val navController = rememberNavController()
+    val backStack by navController.currentBackStackEntryAsState()
+    val currentRoute = backStack?.destination?.route
+
+    val bootState by WaveAppInit.bootState.collectAsState()
+
+    // Tabs that should show the bottom bar. Pushed routes (details, player,
+    // settings) hide it for a more focused UX.
+    val showBottomBar = currentRoute in WaveTab.entries.map { it.route }
+
+    WaveTheme {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                // Hide the top app bar on the player route — full-screen.
+                if (currentRoute != Routes.PLAYER && currentRoute != null) {
+                    TopAppBar(
+                        title = { Text("Wavestream") },
+                        actions = {
+                            IconButton(onClick = { navController.navigate(Routes.SETTINGS) }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = "Settings",
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground,
+                            actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                        ),
+                    )
                 }
-                composable("player/{source}/{url}", listOf(navArgument("source") { type = NavType.StringType }, navArgument("url") { type = NavType.StringType })) { e ->
-                    val s = e.arguments?.read { getStringOrNull("source") }?.urlDecode() ?: return@composable
-                    val u = e.arguments?.read { getStringOrNull("url") }?.urlDecode() ?: return@composable
-                    PlayerScreen(s, u, { navController.popBackStack() })
+            },
+            bottomBar = {
+                if (showBottomBar) {
+                    WaveBottomBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { tab ->
+                            navController.navigate(tab.route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                }
+            },
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                if (!bootState.stage.isReady && currentRoute == Routes.HOME) {
+                    LoadingIndicator(message = bootState.message ?: "Booting…")
+                }
+
+                NavHost(
+                    navController = navController,
+                    startDestination = Routes.HOME,
+                ) {
+                    composable(Routes.HOME) {
+                        HomeScreen(
+                            onPosterClick = { apiName, url ->
+                                NavArgs.setDetail(apiName, url)
+                                navController.navigate(Routes.DETAILS)
+                            },
+                        )
+                    }
+                    composable(Routes.SEARCH) {
+                        SearchScreen(
+                            onPosterClick = { apiName, url ->
+                                NavArgs.setDetail(apiName, url)
+                                navController.navigate(Routes.DETAILS)
+                            },
+                        )
+                    }
+                    composable(Routes.LIBRARY) {
+                        LibraryScreen(
+                            onPosterClick = { apiName, url ->
+                                NavArgs.setDetail(apiName, url)
+                                navController.navigate(Routes.DETAILS)
+                            },
+                        )
+                    }
+                    composable(Routes.DOWNLOADS) { DownloadsScreen() }
+                    composable(Routes.EXTENSIONS) {
+                        ExtensionsScreen(
+                            onRescanRequested = { WaveAppInit.rescan() },
+                        )
+                    }
+                    composable(Routes.SETTINGS) { SettingsScreen() }
+                    composable(Routes.DETAILS) {
+                        val (apiName, url) = NavArgs.consumeDetail()
+                        DetailsScreen(
+                            apiName = apiName,
+                            url = url,
+                            onPlay = { videoUrl ->
+                                NavArgs.setPlayer(videoUrl)
+                                navController.navigate(Routes.PLAYER)
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(Routes.PLAYER) {
+                        val videoUrl = NavArgs.consumePlayer()
+                        PlayerScreen(
+                            videoUrl = videoUrl,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
         }

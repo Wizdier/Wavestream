@@ -1,13 +1,39 @@
-/build/
-/shared/build/
-/library/build/
-/app/build/
+# Gradle / build artifacts
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config
+local.properties
+*.keystore
+*.jks
+
+# Logs
+*.log
+
+# Android
+.cxx/
+captures/
 *.apk
 *.aab
-/.gradle/
-/.kotlin/
-/.idea/
-*.iml
-local.properties
-.DS_Store
-*.log
+*.ap_
+*.dex
+
+# Desktop native distributions
+shared/build/compose/binaries/
