@@ -71,15 +71,17 @@ object Routes {
 object NavArgs {
     @Volatile var detailApiName: String? = null
     @Volatile var detailUrl: String? = null
-    @Volatile var playerUrl: String? = null
+    @Volatile var playerApiName: String? = null
+    @Volatile var playerData: String? = null
 
     fun setDetail(apiName: String, url: String) {
         detailApiName = apiName
         detailUrl = url
     }
 
-    fun setPlayer(url: String) {
-        playerUrl = url
+    fun setPlayer(apiName: String, data: String) {
+        playerApiName = apiName
+        playerData = data
     }
 
     fun consumeDetail(): Pair<String, String> {
@@ -90,10 +92,12 @@ object NavArgs {
         return a to u
     }
 
-    fun consumePlayer(): String {
-        val u = playerUrl.orEmpty()
-        playerUrl = null
-        return u
+    fun consumePlayer(): Pair<String, String> {
+        val a = playerApiName.orEmpty()
+        val d = playerData.orEmpty()
+        playerApiName = null
+        playerData = null
+        return a to d
     }
 }
 
@@ -201,17 +205,18 @@ fun App() {
                         DetailsScreen(
                             apiName = apiName,
                             url = url,
-                            onPlay = { videoUrl ->
-                                NavArgs.setPlayer(videoUrl)
+                            onPlay = { playApiName, playData ->
+                                NavArgs.setPlayer(playApiName, playData)
                                 navController.navigate(Routes.PLAYER)
                             },
                             onBack = { navController.popBackStack() },
                         )
                     }
                     composable(Routes.PLAYER) {
-                        val videoUrl = NavArgs.consumePlayer()
+                        val (apiName, data) = NavArgs.consumePlayer()
                         PlayerScreen(
-                            videoUrl = videoUrl,
+                            apiName = apiName,
+                            data = data,
                             onBack = { navController.popBackStack() },
                         )
                     }

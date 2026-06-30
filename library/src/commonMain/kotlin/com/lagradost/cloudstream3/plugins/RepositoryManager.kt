@@ -179,12 +179,32 @@ object RepositoryManager {
 
     /**
      * Gets all plugins from a repository and pairs them with the repository url.
+     *
+     * Handles two URL formats:
+     * 1. A Repository JSON (object with `pluginLists` field) — fetches each
+     *    plugin list URL and merges results.
+     * 2. A direct plugin list JSON (array of SitePlugin) — uses it directly.
+     *    This is common when users paste a `plugins.json` URL instead of a
+     *    `repo.json` URL (e.g. raw.githubusercontent.com/.../plugins.json).
+     *
+     * Returns null only if both approaches fail. Returns an empty list if
+     * the repo parsed but has zero plugins.
      */
     suspend fun getRepoPlugins(repositoryUrl: String): List<Pair<String, SitePlugin>>? {
-        val repo = parseRepository(repositoryUrl) ?: return null
-        return repo.pluginLists.amap { url ->
-            parsePlugins(url).map { repositoryUrl to it }
-        }.flatten()
+        // Approach 1: try parsing as a Repository JSON
+        val repo = parseRepository(repositoryUrl)
+        if (repo != null && repo.pluginLists.isNotEmpty()) {
+            return repo.pluginLists.amap { url ->
+                parsePlugins(url).map { repositoryUrl to it }
+            }.flatten()
+        }
+        // Approach 2: try parsing the URL directly as a plugin list
+        val directPlugins = parsePlugins(repositoryUrl)
+        if (directPlugins.isNotEmpty()) {
+            return directPlugins.map { repositoryUrl to it }
+        }
+        // Both failed
+        return null
     }
 
     /**

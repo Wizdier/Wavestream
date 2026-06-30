@@ -29,8 +29,16 @@ object DefaultRepos {
      * Canonical CloudStream community repositories. Each entry is a cs.repo
      * short URL — the [RepositoryManager.parseRepoUrl] implementation
      * resolves these to the underlying raw GitHub URL.
+     *
+     * The user's own repo (Wizdier) is included first since it hosts
+     * BD/FTP-based providers tested against this app.
      */
     val CLOUDSTREAM_REPOS: List<RepositoryData> = listOf(
+        RepositoryData(
+            url = "https://raw.githubusercontent.com/Wizdier/Wizdier-CloudstreamRepo/builds/plugins.json",
+            name = "Wizdier's Repository",
+            description = "Cineplex BD, Circle FTP, CTGMovies, FTPBD — Bangladesh FTP streaming.",
+        ),
         RepositoryData(
             url = "https://cs.repo/milkman",
             name = "Milkman's Repository",
@@ -45,11 +53,6 @@ object DefaultRepos {
             url = "https://cs.repo/jeremy",
             name = "Jeremy's Repository",
             description = "Anime-focused providers and subtitle integrations.",
-        ),
-        RepositoryData(
-            url = "https://cs.repo/stremio",
-            name = "Stremio Bridge Repository",
-            description = "Bridges Stremio addons into CloudStream providers.",
         ),
         RepositoryData(
             url = "https://cs.repo/automations",

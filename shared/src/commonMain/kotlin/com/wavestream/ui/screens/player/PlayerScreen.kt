@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -40,54 +39,74 @@ import androidx.compose.ui.unit.dp
 import com.wavestream.ui.components.LoadingIndicator
 import com.wavestream.ui.player.LocalVideoPlayer
 import com.wavestream.ui.player.WaveVideoPlayer
+import com.wavestream.ui.player.loadVideoLinks
 import com.wavestream.ui.player.rememberPlayerSurface
 import com.wavestream.ui.player.supportsEmbeddedPlayback
 
 /**
- * Player screen. The actual rendering is delegated to a platform-specific
- * video player via [LocalVideoPlayer] — on Android this wraps ExoPlayer,
- * on desktop it falls back to opening the URL in the system media player
- * since Java doesn't ship a video decoder.
+ * Player screen. Implements the full CloudStream playback pipeline:
  *
- * The screen handles:
- *  - Back-button dismissal
- *  - Loading spinner while the platform player is buffering
- *  - Error state with retry + open-in-browser fallback
- *  - Player controls overlay (back, status)
- *  - DisposableEffect to release the player when the screen exits
+ * 1. Call [loadVideoLinks] on the provider to extract real stream URLs
+ *    from the `data` parameter returned by `MainAPI.load()`.
+ * 2. Pick the best-quality link.
+ * 3. Hand the URL to the platform player:
+ *    - Android: ExoPlayer via [rememberPlayerSurface] (supports M3U8,
+ *      DASH, and direct video with headers/referer).
+ *    - Desktop: opens the URL in the system media player.
+ *
+ * The screen handles loading, error (with retry + external fallback),
+ * and lifecycle (releases the player on exit).
+ *
+ * @param apiName The provider name (e.g. "Cineplex BD") — used to look up
+ *        the MainAPI instance that will extract links.
+ * @param data The data string from LoadResponse (movie.dataUrl or
+ *        Episode.data) — passed to MainAPI.loadLinks() as the `data`
+ *        parameter.
  */
 @Composable
 fun PlayerScreen(
-    videoUrl: String,
+    apiName: String,
+    data: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var videoUrl by remember { mutableStateOf("") }
     var attempt by remember { mutableStateOf(0) }
     val player = LocalVideoPlayer.current
 
-    // (Re)start playback when the URL or attempt counter changes.
-    LaunchedEffect(videoUrl, attempt) {
-        if (videoUrl.isBlank()) {
-            error = "No playback URL was provided."
+    // Step 1: Load links from the provider.
+    // Re-runs when apiName/data/attempt changes.
+    LaunchedEffect(apiName, data, attempt) {
+        if (data.isBlank()) {
+            error = "No playback data was provided."
             loading = false
             return@LaunchedEffect
         }
         loading = true
         error = null
-        try {
-            player.play(videoUrl) { ok ->
-                if (!ok) error = "Failed to play this stream. The URL may be invalid, expired, or unsupported."
-                loading = false
-            }
-        } catch (e: Throwable) {
-            error = e.message ?: "Unknown playback error"
+        videoUrl = ""
+
+        val result = loadVideoLinks(apiName, data)
+        if (result == null || result.bestUrl.isBlank()) {
+            error = "Failed to extract playable links from '$apiName'. " +
+                "The provider may be offline, the content may have been removed, " +
+                "or the site's extractor may need updating."
             loading = false
+            return@LaunchedEffect
+        }
+
+        videoUrl = result.bestUrl
+        loading = false
+
+        // Also notify the platform player (for lifecycle management on desktop)
+        runCatching {
+            player.play(videoUrl) { /* ok ignored — we render the surface separately */ }
         }
     }
 
-    // Release the player when leaving the screen.
+    // Release the platform player when leaving the screen.
     DisposableEffect(Unit) {
         onDispose { player.stop() }
     }
@@ -116,27 +135,35 @@ fun PlayerScreen(
             )
         }
 
-        // On supported platforms (Android), render the embedded ExoPlayer surface
-        // so the user actually sees video. The WaveVideoPlayer interface is
-        // still used for lifecycle (stop/release), but rendering goes through
-        // rememberPlayerSurface.
-        if (supportsEmbeddedPlayback() && videoUrl.isNotBlank() && error == null) {
-            rememberPlayerSurface(
-                videoUrl = videoUrl,
-                modifier = Modifier.fillMaxSize(),
+        when {
+            loading -> LoadingIndicator(message = "Extracting stream from '$apiName'…")
+            error != null -> PlayerErrorState(
+                error = error!!,
+                onRetry = { attempt++ },
+                onBack = onBack,
+                modifier = Modifier.align(Alignment.Center),
             )
-        } else {
-            when {
-                loading -> LoadingIndicator(message = "Preparing playback…")
-                error != null -> PlayerErrorState(
-                    error = error!!,
+            videoUrl.isNotBlank() && supportsEmbeddedPlayback() -> {
+                // Android: render ExoPlayer surface
+                rememberPlayerSurface(
                     videoUrl = videoUrl,
-                    onRetry = { attempt++ },
-                    onBack = onBack,
-                    modifier = Modifier.align(Alignment.Center),
+                    modifier = Modifier.fillMaxSize(),
                 )
-                else -> PlayerIdleState(
+            }
+            videoUrl.isNotBlank() -> {
+                // Desktop: show the URL and offer to open externally
+                PlayerIdleState(
                     videoUrl = videoUrl,
+                    apiName = apiName,
+                    onOpenExternal = {
+                        runCatching {
+                            val cls = Class.forName("com.wavestream.ui.player.DesktopExternalPlayer")
+                            val ctor = cls.getDeclaredConstructor()
+                            ctor.isAccessible = true
+                            val instance = ctor.newInstance() as WaveVideoPlayer
+                            instance.play(videoUrl) {}
+                        }
+                    },
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
@@ -147,15 +174,12 @@ fun PlayerScreen(
 @Composable
 private fun PlayerErrorState(
     error: String,
-    videoUrl: String,
     onRetry: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(24.dp),
+        modifier = modifier.fillMaxWidth().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -189,29 +213,7 @@ private fun PlayerErrorState(
                 Spacer(Modifier.size(8.dp))
                 Text("Retry")
             }
-            OutlinedButton(onClick = onBack) {
-                Text("Go back")
-            }
-        }
-        Spacer(Modifier.size(32.dp))
-        // Fallback: open the URL in the system browser / media player.
-        // Useful when the in-app player can't handle the codec.
-        OutlinedButton(
-            onClick = {
-                val externalPlayer = com.wavestream.ui.player.NoopVideoPlayer
-                // Use the desktop external player if available, otherwise no-op
-                runCatching {
-                    val cls = Class.forName("com.wavestream.ui.player.DesktopExternalPlayer")
-                    val ctor = cls.getDeclaredConstructor()
-                    ctor.isAccessible = true
-                    val instance = ctor.newInstance() as WaveVideoPlayer
-                    instance.play(videoUrl) {}
-                }
-            },
-        ) {
-            Icon(Icons.Outlined.OpenInBrowser, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.size(8.dp))
-            Text("Open in external player")
+            OutlinedButton(onClick = onBack) { Text("Go back") }
         }
     }
 }
@@ -219,12 +221,12 @@ private fun PlayerErrorState(
 @Composable
 private fun PlayerIdleState(
     videoUrl: String,
+    apiName: String,
+    onOpenExternal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(24.dp),
+        modifier = modifier.fillMaxWidth().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -236,26 +238,29 @@ private fun PlayerIdleState(
         )
         Spacer(Modifier.size(16.dp))
         Text(
-            text = "Now playing",
+            text = "Ready to play",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.size(8.dp))
         Text(
-            text = videoUrl,
+            text = "Source: $apiName",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
         )
-        Spacer(Modifier.size(16.dp))
+        Spacer(Modifier.size(4.dp))
         Text(
-            text = "If you don't see video, your platform may not have a built-in decoder. " +
-                "Try the 'Open in external player' option when an error appears.",
+            text = videoUrl.take(80) + if (videoUrl.length > 80) "…" else "",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+        Spacer(Modifier.size(24.dp))
+        OutlinedButton(onClick = onOpenExternal) {
+            Icon(Icons.Outlined.OpenInBrowser, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.size(8.dp))
+            Text("Open in system player")
+        }
     }
 }

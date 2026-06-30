@@ -54,7 +54,7 @@ import kotlinx.coroutines.withContext
 fun DetailsScreen(
     apiName: String,
     url: String,
-    onPlay: (videoUrl: String) -> Unit,
+    onPlay: (apiName: String, data: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -104,7 +104,7 @@ fun DetailsScreen(
 @Composable
 private fun DetailContent(
     detail: LoadResponse,
-    onPlay: (videoUrl: String) -> Unit,
+    onPlay: (apiName: String, data: String) -> Unit,
     onBack: () -> Unit,
 ) {
     LazyColumn(
@@ -175,7 +175,7 @@ private fun DetailContent(
                 }
                 if (dataUrl.isNotBlank()) {
                     Button(
-                        onClick = { onPlay(dataUrl) },
+                        onClick = { onPlay(detail.apiName, dataUrl) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Outlined.PlayArrow, contentDescription = null)
@@ -205,7 +205,7 @@ private fun DetailContent(
                 items(episodes) { ep ->
                     EpisodeRow(
                         episode = ep,
-                        onClick = { onPlay(ep.data) },
+                        onClick = { onPlay(detail.apiName, ep.data) },
                     )
                 }
             }

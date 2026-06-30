@@ -109,49 +109,57 @@ object StremioAddonRepository {
     /** Returns the list of installed addon URLs. */
     fun listAddons(): List<String> {
         val raw = com.wavestream.platform.wavePlatform.preferences.getString(PREF_KEY) ?: return emptyList()
-        return runCatching { json.decodeFromString<List<String>>(raw) }.getOrElse { emptyList() }
+        return runCatching {
+            json.decodeFromString<List<String>>(raw)
+        }.getOrElse { emptyList() }
     }
 
     fun addAddon(url: String) {
-        val current = listAddons().toMutableList()
-        if (url in current) return
-        current.add(url)
-        com.wavestream.platform.wavePlatform.preferences.putString(PREF_KEY, json.encodeToString(current))
-        listeners.forEach { it() }
+        val current: List<String> = (listAddons() + url).distinct()
+        com.wavestream.platform.wavePlatform.preferences.putString(
+            PREF_KEY,
+            json.encodeToString(current),
+        )
+        listeners.forEach { runCatching { it() } }
     }
 
     fun removeAddon(url: String) {
-        val current = listAddons().toMutableList()
-        current.remove(url)
-        com.wavestream.platform.wavePlatform.preferences.putString(PREF_KEY, json.encodeToString(current))
-        listeners.forEach { it() }
+        val current: List<String> = listAddons().filter { it != url }
+        com.wavestream.platform.wavePlatform.preferences.putString(
+            PREF_KEY,
+            json.encodeToString(current),
+        )
+        listeners.forEach { runCatching { it() } }
     }
 
     /**
      * Re-registers all installed Stremio addons as CloudStream providers.
      * Call after plugins load and after every add/remove operation.
+     *
+     * Wraps all mutations in runCatching so a single bad addon URL can't
+     * crash the boot sequence.
      */
     fun syncProviders() {
-        val existing = APIHolder.allProviders.withLock {
-            APIHolder.allProviders.filterIsInstance<StremioProviderAdapter>()
-        }
-        // Remove existing Stremio providers (AtomicList doesn't expose
-        // minusAssign directly; we iterate and remove explicitly).
-        existing.forEach { provider ->
-            APIHolder.allProviders.withLock {
-                val iter = APIHolder.allProviders.iterator()
-                while (iter.hasNext()) {
-                    if (iter.next() === provider) {
-                        iter.remove()
-                        break
-                    }
+        runCatching {
+            // Remove all existing StremioProviderAdapter instances.
+            // We use a filter-based approach to avoid iterator mutation issues.
+            val toRemove = APIHolder.allProviders.withLock {
+                APIHolder.allProviders.filterIsInstance<StremioProviderAdapter>()
+            }
+            for (provider in toRemove) {
+                APIHolder.allProviders.withLock {
+                    // AtomicMutableList supports remove(element)
+                    APIHolder.allProviders.remove(provider)
                 }
             }
-        }
 
-        for (url in listAddons()) {
-            val provider = StremioProviderAdapter(url)
-            APIHolder.allProviders.withLock { APIHolder.allProviders.add(provider) }
+            // Register fresh instances for all installed addons.
+            for (url in listAddons()) {
+                runCatching {
+                    val provider = StremioProviderAdapter(url)
+                    APIHolder.allProviders.withLock { APIHolder.allProviders.add(provider) }
+                }
+            }
         }
     }
 }
