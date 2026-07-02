@@ -418,19 +418,19 @@ abstract class NativeBasePlayer : IPlayer {
 
     override fun getCurrentPreferredSubtitle(): SubtitleData? = preferredSubtitle
 
-    override fun handleEvent(playerEvent: CSPlayerEvent, source: PlayerEventSource) {
+    override fun handleEvent(event: CSPlayerEvent, source: PlayerEventSource) {
         try {
-            when (playerEvent) {
+            when (event) {
                 CSPlayerEvent.Play -> {
                     enginePlay()
                     updateStatus(CSPlayerLoading.IsPlaying)
-                    event(PlayEvent(source))
+                    this.event(PlayEvent(source))
                 }
 
                 CSPlayerEvent.Pause -> {
                     enginePause()
                     updateStatus(CSPlayerLoading.IsPaused)
-                    event(PauseEvent(source))
+                    this.event(PauseEvent(source))
                 }
 
                 CSPlayerEvent.PlayPauseToggle -> {
@@ -445,17 +445,17 @@ abstract class NativeBasePlayer : IPlayer {
                 CSPlayerEvent.SeekBack -> seekTime(-30_000L, source)
                 CSPlayerEvent.Restart -> seekTo(0L, source)
 
-                CSPlayerEvent.NextEpisode -> event(EpisodeSeekEvent(offset = 1, source = source))
-                CSPlayerEvent.PrevEpisode -> event(EpisodeSeekEvent(offset = -1, source = source))
+                CSPlayerEvent.NextEpisode -> this.event(EpisodeSeekEvent(offset = 1, source = source))
+                CSPlayerEvent.PrevEpisode -> this.event(EpisodeSeekEvent(offset = -1, source = source))
 
                 CSPlayerEvent.SkipCurrentChapter -> {
                     lastTimeStamp?.let { stamp ->
                         if (stamp.skipToNextEpisode) {
-                            event(EpisodeSeekEvent(offset = 1, source = source))
+                            this.event(EpisodeSeekEvent(offset = 1, source = source))
                         } else {
                             seekTo(stamp.timestamp.endMs, source)
                         }
-                        event(TimestampSkippedEvent(timestamp = stamp, source = source))
+                        this.event(TimestampSkippedEvent(timestamp = stamp, source = source))
                     }
                 }
 
@@ -463,7 +463,7 @@ abstract class NativeBasePlayer : IPlayer {
                 CSPlayerEvent.PlayAsAudio -> Unit // Not supported by native engines yet
             }
         } catch (t: Throwable) {
-            event(ErrorEvent(t, source))
+            this.event(ErrorEvent(t, source))
         }
     }
 

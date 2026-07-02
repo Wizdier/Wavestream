@@ -28,7 +28,6 @@ junitVersion = "1.3.0"
 juniversalchardet = "2.5.0"
 kotlinGradlePlugin = "2.3.20"
 kotlinxAtomicfu = "0.33.0"
-libmpv = "0.5.1"
 libvlc = "3.6.0"
 kotlinxCollectionsImmutable = "0.4.0"
 kotlinxCoroutinesCore = "1.11.0"
@@ -131,7 +130,6 @@ safefile = { module = "com.github.LagradOst:SafeFile", version.ref = "safefile" 
 shimmer = { module = "com.facebook.shimmer:shimmer", version.ref = "shimmer" }
 tmdb-java = { module = "com.uwetrottmann.tmdb2:tmdb-java", version.ref = "tmdbJava" }
 torrentserver = { module = "com.github.recloudstream:torrentserver", version.ref = "torrentserver" }
-libmpv = { module = "dev.jdtech.mpv:libmpv", version.ref = "libmpv" }
 libvlc-all = { module = "org.videolan.android:libvlc-all", version.ref = "libvlc" }
 tvprovider = { module = "androidx.tvprovider:tvprovider", version.ref = "tvprovider" }
 video = { module = "com.google.android.mediahome:video", version.ref = "video" }

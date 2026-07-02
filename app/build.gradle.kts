@@ -206,6 +206,8 @@ android {
             // Enables legacy JNI packaging to reduce APK size (similar to builds before minSdk 23).
             // Note: This may increase app startup time slightly.
             useLegacyPackaging = true
+            // WaveStream: libmpv and libVLC both bundle libc++_shared.so — keep one copy.
+            pickFirsts += "lib/**/libc++_shared.so"
         }
     }
 
@@ -249,8 +251,11 @@ dependencies {
     // FFmpeg Decoding
     implementation(libs.bundles.nextlib)
 
-    // WaveStream: in-app MPV (libmpv) and VLC (libVLC) player engines
-    implementation(libs.libmpv)
+    // WaveStream: in-app MPV and VLC player engines.
+    // libmpv is a locally patched AAR: its bundled FFmpeg .so files are renamed
+    // (libavcodec.so -> libavcodec_mpv.so, etc.) so they don't collide with the
+    // FFmpeg libraries that nextlib (ExoPlayer software decoding) ships.
+    implementation(files("libs/libmpv-0.5.1-wavestream.aar"))
     implementation(libs.libvlc.all)
 
     // Anime-db for filler
