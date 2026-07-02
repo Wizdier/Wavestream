@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.Log
 import android.util.Rational
 import android.view.TextureView
+import android.view.ViewGroup
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.preference.PreferenceManager
 import com.lagradost.cloudstream3.CloudStreamApp
@@ -98,7 +99,7 @@ abstract class NativeBasePlayer : IPlayer {
     protected var pendingLoad: LoadRequest? = null
     protected var surfaceReady = false
     protected var videoView: TextureView? = null
-    protected var contentFrame: AspectRatioFrameLayout? = null
+    protected var contentFrame: ViewGroup? = null
     protected var lastStatus: CSPlayerLoading = CSPlayerLoading.IsBuffering
     protected var videoWidth = 0
     protected var videoHeight = 0
@@ -123,7 +124,7 @@ abstract class NativeBasePlayer : IPlayer {
     protected abstract fun engineGetDuration(): Long?
 
     /** Called by [PlayerView] once the TextureView has been injected into the view tree. */
-    fun attachVideoView(view: TextureView, frame: AspectRatioFrameLayout?) {
+    fun attachVideoView(view: TextureView, frame: ViewGroup?) {
         videoView = view
         contentFrame = frame
         view.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -206,7 +207,7 @@ abstract class NativeBasePlayer : IPlayer {
         videoHeight = height
         mainHandler.post {
             try {
-                contentFrame?.setAspectRatio(width.toFloat() / height.toFloat())
+                (contentFrame as? AspectRatioFrameLayout)?.setAspectRatio(width.toFloat() / height.toFloat())
             } catch (t: Throwable) {
                 logError(t)
             }

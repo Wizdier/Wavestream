@@ -17,6 +17,7 @@ import android.text.format.DateUtils
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
 import android.widget.FrameLayout
@@ -289,14 +290,14 @@ class PlayerView @JvmOverloads constructor(
                 exoView.setKeepContentOnPlayerReset(true)
 
                 // Robust lookup for content frame (library id or fallback)
-                var contentFrame: AspectRatioFrameLayout? = exoView.findViewById(androidx.media3.ui.R.id.exo_content_frame)
+                var contentFrame: ViewGroup? = exoView.findViewById(androidx.media3.ui.R.id.exo_content_frame)
                 if (contentFrame == null) {
                     val resId = exoView.resources.getIdentifier("exo_content_frame", "id", "androidx.media3.ui")
                     if (resId != 0) contentFrame = exoView.findViewById(resId)
                 }
                 if (contentFrame == null) {
                     // last resort: use the player view itself (rare)
-                    contentFrame = (exoView as? AspectRatioFrameLayout) ?: exoView.findViewWithTag("exo_content_frame") as? AspectRatioFrameLayout
+                    contentFrame = (exoView as? ViewGroup) ?: exoView.findViewWithTag("exo_content_frame") as? ViewGroup
                 }
                 if (contentFrame == null) {
                     // ultimate fallback: use the root of player view
