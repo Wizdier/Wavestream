@@ -284,16 +284,98 @@ class PlayerView @JvmOverloads constructor(
         // a SimpleBasePlayer adapter.
         (player as? NativeBasePlayer)?.let { nativePlayer ->
             try {
-                val contentFrame = exoPlayerView
-                    ?.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
-                val texture = android.view.TextureView(context)
-                texture.layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                )
+                val exoView = exoPlayerView ?: return@let
+                exoView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                exoView.setKeepContentOnPlayerReset(true)
+
+                // Robust lookup for content frame (library id or fallback)
+                var contentFrame: AspectRatioFrameLayout? = exoView.findViewById(androidx.media3.ui.R.id.exo_content_frame)
+                if (contentFrame == null) {
+                    val resId = exoView.resources.getIdentifier("exo_content_frame", "id", "androidx.media3.ui")
+                    if (resId != 0) contentFrame = exoView.findViewById(resId)
+                }
+                if (contentFrame == null) {
+                    // last resort: use the player view itself (rare)
+                    contentFrame = (exoView as? AspectRatioFrameLayout) ?: exoView.findViewWithTag("exo_content_frame") as? AspectRatioFrameLayout
+                }
+                if (contentFrame == null) {
+                    // ultimate fallback: use the root of player view
+                    contentFrame = exoView
+                }
+
+                // Clean any previous custom TextureViews to avoid stacking/leaks on re-init
+                contentFrame?.let { cf ->
+                    for (i in cf.childCount - 1 downTo 0) {
+                        val child = cf.getChildAt(i)
+                        if (child is android.view.TextureView && child.tag == "wavestream_native_video") {
+                            cf.removeViewAt(i)
+                        }
+                    }
+                }
+
+                val texture = android.view.TextureView(context).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                    tag = "wavestream_native_video"
+                    isOpaque = true
+                    visibility = View.VISIBLE
+                    alpha = 1f
+                }
+
+                // Hide or remove default Media3 video surface (prevents black overlay / double rendering)
+                val defaultVideo = exoView.videoSurfaceView
+                if (defaultVideo != null) {
+                    defaultVideo.visibility = View.GONE
+                    (defaultVideo.parent as? ViewGroup)?.removeView(defaultVideo)
+                }
+
+                // Also hide any other surface children that might be present
+                contentFrame?.let { cf ->
+                    for (i in cf.childCount - 1 downTo 0) {
+                        val c = cf.getChildAt(i)
+                        if (c is android.view.SurfaceView || (c is android.view.TextureView && c.tag != "wavestream_native_video")) {
+                            c.visibility = View.GONE
+                        }
+                    }
+                }
+
                 contentFrame?.addView(texture, 0)
+                texture.bringToFront()
+                contentFrame?.bringChildToFront(texture)
+                contentFrame?.requestLayout()
+                contentFrame?.invalidate()
+                exoView.requestLayout()
+                exoView.invalidate()
+
                 nativePlayer.attachVideoView(texture, contentFrame)
-                exoPlayerView?.player = nativePlayer.media3Adapter
+                exoView.player = nativePlayer.media3Adapter
+
+                // Ensure controller and no interference
+                exoView.useController = true
+                exoView.controllerAutoShow = false
+                exoView.controllerHideOnTouch = false
+
+                // Make sure the surface is on top + visible
+                texture.visibility = View.VISIBLE
+                texture.alpha = 1f
+                texture.bringToFront()
+
+                // Force a layout pass after attach for native video to become visible immediately
+                texture.post {
+                    texture.requestLayout()
+                    texture.invalidate()
+                    contentFrame?.requestLayout()
+                    contentFrame?.invalidate()
+                    exoView.requestLayout()
+                    exoView.invalidate()
+                    // Extra safety: request the controller to draw its UI elements
+                    exoView.postDelayed({
+                        exoView.invalidate()
+                        exoView.requestLayout()
+                    }, 80)
+                }
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to attach native player view", t)
             }
@@ -439,6 +521,39 @@ class PlayerView @JvmOverloads constructor(
 
             // Apply duration-mode display (remaining time vs elapsed); TV always shows remaining
             setRemainingTimeCounter(durationMode || isLayout(TV))
+        }
+
+        // === ALWAYS wire basic UI controls for ALL players (Exo + MPV + VLC) ===
+        // This was previously inside the CS3IPlayer-only block, causing missing buttons / no interaction on native engines.
+        playerPausePlay?.setOnClickListener {
+            scheduleAutoHide()
+            if (currentPlayerStatus == CSPlayerLoading.IsEnded && isLayout(PHONE)) {
+                player.handleEvent(CSPlayerEvent.Restart, PlayerEventSource.UI)
+            } else {
+                player.handleEvent(CSPlayerEvent.PlayPauseToggle, PlayerEventSource.UI)
+            }
+        }
+        playerRew?.setOnClickListener {
+            scheduleAutoHide()
+            gestureHelper.rewind()
+        }
+        playerFfwd?.setOnClickListener {
+            scheduleAutoHide()
+            gestureHelper.fastForward()
+        }
+
+        // Ensure gestures are always initialized (safe for native too)
+        // (CS3IPlayer path already called it above; this guarantees native)
+        if (player !is CS3IPlayer) {
+            gestureHelper.initialize()
+            setupKeyEventListener()
+            setRemainingTimeCounter(durationMode || isLayout(TV))
+        }
+
+        // Final force layout for native video surface to become visible immediately
+        exoPlayerView?.post {
+            exoPlayerView?.invalidate()
+            exoPlayerView?.requestLayout()
         }
     }
 
