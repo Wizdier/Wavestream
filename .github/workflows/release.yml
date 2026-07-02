@@ -1,188 +1,67 @@
-name: Release
-
-# Triggered when a tag matching `v*` (e.g. v0.1.0, v1.0.0-rc1) is pushed.
-# Builds a signed-or-unsigned debug APK and uploads it to the GitHub
-# Release associated with the tag. Also builds the desktop uber jar so
-# Linux/macOS/Windows users have a runnable artifact.
-#
-# To cut a release locally:
-#   git tag v0.1.0
-#   git push origin v0.1.0
-#
-# The workflow will then:
-#   1. Build :app:assembleDebug            -> wavestream-{tag}-android.apk
-#   2. Build :shared:packageUberJarForCurrentOS -> wavestream-{tag}-linux-x64.jar
-#   3. Create a GitHub Release (if it doesn't exist) with auto-generated notes
-#   4. Upload both artifacts to the Release
+name: Release build
 
 on:
   push:
     tags:
-      - 'v*'
-      - 'v*.*.*'
-      - 'v*.*.*-*'
-
-  # Allow manual triggering from the Actions tab — useful for testing the
-  # release pipeline without cutting a real tag.
+      - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag name to simulate (e.g. v0.1.0)'
-        required: true
-        default: 'v0.0.0-test'
 
 permissions:
-  contents: write   # required for softprops/action-gh-release to upload assets
+  contents: write
 
 jobs:
-  build-android:
-    name: Build Android APK
+  release:
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Ensure gradlew is executable
-        run: chmod +x ./gradlew
+      - uses: actions/checkout@v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
-      - name: Configure Android SDK
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build stable release APK
+        env:
+          SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
+          SIMKL_CLIENT_SECRET: ${{ secrets.SIMKL_CLIENT_SECRET }}
+          MAL_KEY: ${{ secrets.MAL_KEY }}
+          ANILIST_KEY: ${{ secrets.ANILIST_KEY }}
+        run: ./gradlew assembleStableRelease
+
+      - name: Sign APK (if keystore provided)
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          echo "$KEYSTORE_B64" | base64 -d > keystore.jks
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          for apk in app/build/outputs/apk/stable/release/*-unsigned.apk; do
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks keystore.jks \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" \
+              --key-pass env:KEY_PASSWORD \
+              --out "${apk/-unsigned/-signed}" "$apk"
+          done
 
-      - name: Extract tag name
-        id: meta
+      - name: Collect APKs
         run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Releasing as $TAG"
+          mkdir -p out
+          find app/build/outputs/apk/stable/release -name "*.apk" -exec cp {} out/ \;
+          ls -la out/
 
-      - name: Build Android APK (debug)
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
-
-      - name: Rename APK to include tag
-        run: |
-          mkdir -p artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk \
-             "artifacts/wavestream-${{ steps.meta.outputs.tag }}-android.apk"
-
-      - name: Upload APK artifact (intermediate)
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: artifacts/*.apk
-          if-no-files-found: error
-          retention-days: 7
-
-  build-desktop:
-    name: Build Desktop Jar
-    needs: build-android
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Ensure gradlew is executable
-        run: chmod +x ./gradlew
-
-      - name: Set up JDK 17 (full JDK for jlink)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Configure Android SDK (shared module needs it for KMP android target)
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Build desktop uber jar (Linux x64)
-        run: ./gradlew :shared:packageUberJarForCurrentOS --no-daemon --stacktrace
-
-      - name: Rename jar to include tag
-        run: |
-          mkdir -p artifacts
-          cp shared/build/compose/jars/Wavestream-linux-x64-*.jar \
-             "artifacts/wavestream-${{ needs.build-android.outputs.tag }}-linux-x64.jar" 2>/dev/null || \
-          cp shared/build/compose/jars/Wavestream-*.jar \
-             "artifacts/wavestream-${{ needs.build-android.outputs.tag }}-desktop.jar"
-        # The first cp tries the linux-x64 filename; if that fails (e.g. on a
-        # different runner OS), the fallback copies whatever jar was built.
-
-      - name: Upload jar artifact (intermediate)
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-jar
-          path: artifacts/*.jar
-          if-no-files-found: error
-          retention-days: 7
-
-  publish-release:
-    name: Publish GitHub Release
-    needs: [build-android, build-desktop]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          merge-multiple: true
-
-      - name: List downloaded artifacts
-        run: ls -lhR release-assets/
-
-      - name: Create or update GitHub Release
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.build-android.outputs.tag }}
-          name: Wavestream ${{ needs.build-android.outputs.tag }}
+          files: out/*.apk
           generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(needs.build-android.outputs.tag, '-') }}
-          files: |
-            release-assets/*.apk
-            release-assets/*.jar
-          body: |
-            ## Wavestream ${{ needs.build-android.outputs.tag }}
-
-            ### Downloads
-            - **Android APK** — `wavestream-${{ needs.build-android.outputs.tag }}-android.apk`
-              Install on any Android 8.0+ device. Enable "Install from unknown sources" if prompted.
-            - **Desktop Jar** — `wavestream-${{ needs.build-android.outputs.tag }}-linux-x64.jar`
-              Run with `java -jar <file>` on any system with Java 17+.
-
-            ### What's new
-            See the auto-generated changelog below for commit history since the last release.
-
-            ### Verification
-            - APK: built with `./gradlew :app:assembleDebug` against `minSdk=26`, `targetSdk=35`
-            - Jar: built with `./gradlew :shared:packageUberJarForCurrentOS` (Linux x64)
-
-            ### Credits
-            Built on top of [CloudStream 3](https://github.com/recloudstream/cloudstream) (GPL-3.0).
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

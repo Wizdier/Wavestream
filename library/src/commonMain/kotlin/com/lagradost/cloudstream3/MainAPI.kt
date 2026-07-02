@@ -739,8 +739,7 @@ fun MainAPI.fixUrlNull(url: String?): String? {
 fun MainAPI.fixUrl(url: String): String {
     if (url.startsWith("http") ||
         // Do not fix JSON objects and arrays when passed as urls.
-        url.startsWith("{\"") || url.startsWith("[") ||
-        url.startsWith("stremio:")
+        url.startsWith("{\"") || url.startsWith("[")
     ) {
         return url
     }
@@ -2707,7 +2706,7 @@ fun fetchUrls(text: String?): List<String> {
 fun isUpcoming(dateString: String?): Boolean {
     return runCatching {
         val fmt = DateTimeComponents.Format {
-            year(); char('-'); monthNumber(); char('-'); dayOfMonth()
+            year(); char('-'); monthNumber(); char('-'); day()
         }
         val components = DateTimeComponents.parse(dateString ?: return false, fmt)
         /**
@@ -2717,11 +2716,10 @@ fun isUpcoming(dateString: String?): Boolean {
          * 2. If it has time but no offset (e.g. "2026-05-17T14:35"), fall back to device timezone
          * 3. If it's date-only (e.g. "2026-05-17"), use start of day in device timezone
          */
-        val kotlinxInstant = runCatching { components.toInstantUsingOffset() }
+        val instant = runCatching { components.toInstantUsingOffset() }
             .recoverCatching { components.toLocalDateTime().toInstant(TimeZone.currentSystemDefault()) }
             .getOrElse { components.toLocalDate().atStartOfDayIn(TimeZone.currentSystemDefault()) }
-        val nowMs = Clock.System.now().toEpochMilliseconds()
-        nowMs < kotlinxInstant.toEpochMilliseconds()
+        Clock.System.now() < instant
     }.onFailure { logError(it) }.getOrElse { false }
 }
 

@@ -1,8 +1,17 @@
 package com.lagradost.cloudstream3.utils
 
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+
+/**
+ * A thread-safe list backed by [SynchronizedObject].
+ *
+ * For iteration, wrap block in [withLock] to hold the lock for the duration:
+ *   list.withLock { list.forEach { ... } }
+ */
 open class AtomicList<T>(
     private val delegate: List<T> = emptyList(),
-) : List<T> {
+) : List<T>, SynchronizedObject() {
 
     fun <R> withLock(block: () -> R): R = synchronized(this) { block() }
 
@@ -17,10 +26,11 @@ open class AtomicList<T>(
     override fun indexOf(element: T): Int = synchronized(this) { delegate.indexOf(element) }
     override fun lastIndexOf(element: T): Int = synchronized(this) { delegate.lastIndexOf(element) }
 
-    override fun iterator(): Iterator<T> = synchronized(this) { delegate.iterator() }
-    override fun listIterator(): ListIterator<T> = synchronized(this) { delegate.listIterator() }
-    override fun listIterator(index: Int): ListIterator<T> = synchronized(this) { delegate.listIterator(index) }
-    override fun subList(fromIndex: Int, toIndex: Int): List<T> = synchronized(this) { delegate.subList(fromIndex, toIndex) }
+    // Iterators intentionally NOT synchronized, callers must use withLock { } for safe iteration.
+    override fun iterator(): Iterator<T> = delegate.iterator()
+    override fun listIterator(): ListIterator<T> = delegate.listIterator()
+    override fun listIterator(index: Int): ListIterator<T> = delegate.listIterator(index)
+    override fun subList(fromIndex: Int, toIndex: Int): List<T> = delegate.subList(fromIndex, toIndex)
 
     operator fun plus(element: T): AtomicList<T> = synchronized(this) { AtomicList(delegate + element) }
     operator fun plus(elements: Collection<T>): AtomicList<T> = synchronized(this) { AtomicList(delegate + elements) }
@@ -41,8 +51,9 @@ class AtomicMutableList<T>(
     override fun set(index: Int, element: T): T = synchronized(this) { mutableDelegate.set(index, element) }
     override fun clear() = synchronized(this) { mutableDelegate.clear() }
 
-    override fun iterator(): MutableIterator<T> = synchronized(this) { mutableDelegate.iterator() }
-    override fun listIterator(): MutableListIterator<T> = synchronized(this) { mutableDelegate.listIterator() }
-    override fun listIterator(index: Int): MutableListIterator<T> = synchronized(this) { mutableDelegate.listIterator(index) }
-    override fun subList(fromIndex: Int, toIndex: Int): MutableList<T> = synchronized(this) { mutableDelegate.subList(fromIndex, toIndex) }
+    // Iterators intentionally NOT synchronized, callers must use withLock { } for safe iteration.
+    override fun iterator(): MutableIterator<T> = mutableDelegate.iterator()
+    override fun listIterator(): MutableListIterator<T> = mutableDelegate.listIterator()
+    override fun listIterator(index: Int): MutableListIterator<T> = mutableDelegate.listIterator(index)
+    override fun subList(fromIndex: Int, toIndex: Int): MutableList<T> = mutableDelegate.subList(fromIndex, toIndex)
 }

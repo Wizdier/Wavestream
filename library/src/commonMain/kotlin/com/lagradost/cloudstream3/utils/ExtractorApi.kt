@@ -303,6 +303,10 @@ import com.lagradost.cloudstream3.extractors.XStreamCdn
 import com.lagradost.cloudstream3.extractors.Xenolyzb
 import com.lagradost.cloudstream3.extractors.Yipsu
 import com.lagradost.cloudstream3.extractors.YourUpload
+import com.lagradost.cloudstream3.extractors.YoutubeExtractor
+import com.lagradost.cloudstream3.extractors.YoutubeMobileExtractor
+import com.lagradost.cloudstream3.extractors.YoutubeNoCookieExtractor
+import com.lagradost.cloudstream3.extractors.YoutubeShortLinkExtractor
 import com.lagradost.cloudstream3.extractors.Yufiles
 import com.lagradost.cloudstream3.extractors.Yuguaab
 import com.lagradost.cloudstream3.extractors.Zplayer
@@ -1176,6 +1180,10 @@ val extractorApis: AtomicMutableList<ExtractorApi> = atomicListOf(
     DatabaseGdrive2(),
     Mediafire(),
 
+    YoutubeExtractor(),
+    YoutubeShortLinkExtractor(),
+    YoutubeMobileExtractor(),
+    YoutubeNoCookieExtractor(),
     Streamlare(),
     PlayLtXyz(),
 

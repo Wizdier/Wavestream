@@ -1,157 +1,97 @@
-# Wavestream
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="128" alt="WaveStream logo"/>
+</p>
 
-A Compose Multiplatform fork of [CloudStream 3](https://github.com/recloudstream/cloudstream) — a media streaming app that loads community-built plugins (`.cs3` for Android, `.jar` for desktop) to aggregate free movie, series, anime, and live TV sources.
+<h1 align="center">WaveStream</h1>
 
-> **Status:** Working skeleton. Library module compiles against the real CloudStream plugin API; Compose Multiplatform UI runs on Android and Desktop JVM.
+<p align="center"><b>Ride the wave. Stream everything.</b></p>
 
-## Architecture
+**⚠️ Warning: By default, this app doesn't provide any video sources; you have to install extensions to add functionality to the app.**
 
-Wavestream has three modules:
+WaveStream is a fork of [CloudStream](https://github.com/recloudstream/cloudstream) — the same powerful, extension-based media center, reskinned with a fresh ocean look.
 
-| Module | Purpose |
-| --- | --- |
-| `library/` | Verbatim copy of CloudStream 3's `library` module, using `com.lagradost.cloudstream3.*` packages so real CloudStream plugins load without modification. |
-| `shared/` | Compose Multiplatform UI module (`com.wavestream.*`). All screens (Home, Search, Details, Player, Library, Downloads, Extensions, Settings), Stremio addon support, theme, and platform abstractions. |
-| `app/` | Android application entry point. |
+## WaveStream exclusives
 
-**Key insight**: The library module uses the *exact same package names* as CloudStream (`com.lagradost.cloudstream3.MainAPI`, `com.lagradost.cloudstream3.plugins.BasePlugin`, etc.). This means real CloudStream `.cs3` (Android) and `.jar` (Desktop) plugins load successfully because they were compiled against those same package names.
++ **Built-in MPV & VLC engines** — Settings → Player → *Playback engine*: choose ExoPlayer (default), MPV (libmpv) or VLC (libVLC) as the engine that plays videos **inside the app** — same UI, same gestures, same subtitles picker, no external apps needed. Falls back to ExoPlayer automatically if an engine fails. (MPV requires Android 8+.)
++ **Deep Ocean theme** — a new immersive dark-navy default theme tuned for OLED and long viewing sessions (the full original theme list is still available)
++ **Edge-to-edge immersive UI** — the app now draws into display cutouts/notches for a truly full-screen experience
++ **Leaner memory profile** — image caches are released automatically under memory pressure, keeping low-RAM phones and TV boxes smooth
++ **Hardened crash recovery** — the crash handler can no longer crash itself; the app restarts cleanly instead of looping
++ **Faster builds** — parallel Gradle + incremental Kotlin enabled out of the box
 
 ## Features
 
-- **Plugin loading** via `PluginManager` — drop `.cs3` or `.jar` files into the Extensions directory and they're auto-discovered at boot.
-- **Repository management** — add CloudStream repo URLs (`cloudstreamrepo://...`, `https://cs.repo/...`, or raw GitHub URLs) to browse and install plugins.
-- **Stremio addon support** — wrap a Stremio addon URL as a native `MainAPI` provider so its catalog and streams appear alongside CS providers.
-- **Compose Multiplatform UI** — same Kotlin code renders on Android (phones/tablets) and Desktop JVM (Linux/macOS/Windows).
-- **Material 3 theming** with a dark ocean-blue palette tuned for long-form video consumption.
-- **Shimmer loading placeholders**, press-scale poster cards, debounced multi-provider search.
++ **100% CloudStream-compatible** — all existing CloudStream extensions (`.cs3` plugins) and repositories work out of the box
++ Stream and download Movies, TV series, Anime, Live TV and more
++ No ads, no tracking, no account required
++ Extension/plugin system with community repositories
++ Chromecast + FCast support
++ Tracker sync: MyAnimeList, AniList, Simkl
++ Subtitle support (OpenSubtitles, SubDL, SubSource, Addic7ed) with full styling
++ Built-in ExoPlayer with gestures, PiP, speed control, external player support (VLC, mpv, …)
++ Phone, tablet and Android TV layouts
++ Downloads with queue management and offline playback
++ Backup & restore, multiple user profiles
++ In-app updates from this repository ([Wizdier/WaveStream](https://github.com/Wizdier/WaveStream))
 
-## Build
+## What's different from CloudStream?
 
-### Prerequisites
+WaveStream is intentionally a **skin-level fork**:
 
-- JDK 17 (the project uses the Gradle toolchain to auto-download if missing)
-- Android SDK with `platform-35` and `build-tools;35.0.0` (for the Android target)
-- Internet access (Gradle pulls dependencies from Maven Central, Google, JitPack, and JetBrains' Compose dev repo)
+| | CloudStream | WaveStream |
+|---|---|---|
+| App name | CloudStream | WaveStream |
+| Package ID | `com.lagradost.cloudstream3` | `com.wizdier.wavestream` (installs side-by-side!) |
+| Icon | Blue cloud | Teal/cyan waves |
+| Theme accent | Blue `#3d50fa` | Ocean cyan `#00B8C4` / `#22D3EE` |
+| Updates from | recloudstream/cloudstream | Wizdier/WaveStream |
+| Extension API | `com.lagradost.cloudstream3` | **unchanged** (full compatibility) |
 
-> **minSdk note:** All three modules use `minSdk = 26` (Android 8.0). This is required because Rhino 1.9.1 (the JS engine used by CloudStream's library to evaluate extractor scripts) uses `MethodHandle.invoke` / `invokeExact`, which only became available in Android API 26.
+Because the internal Kotlin package is untouched, every CloudStream plugin loads and runs in WaveStream without modification.
 
-### Verify the build (Desktop only)
+## Installation
 
-```bash
-chmod +x ./gradlew        # only needed once after extracting the zip
-./gradlew :library:compileKotlinDesktop :shared:compileKotlinDesktop
-```
+1. Download the latest APK from [Releases](https://github.com/Wizdier/WaveStream/releases).
+2. Install it (allow unknown sources if prompted).
+3. Add an extension repository: **Settings → Extensions → Add repository**, or follow the [CloudStream docs](https://recloudstream.github.io/csdocs/) — all repos work identically here.
+4. Install extensions, pick a provider on the Home tab, and enjoy.
 
-This is the canonical verification target — both modules compile against the JVM target.
-
-> **Tip:** If you see `./gradlew: Permission denied`, run `chmod +x ./gradlew`. The GitHub Actions workflow already does this automatically.
-
-### Run the desktop app
-
-```bash
-./gradlew :shared:run
-```
-
-### Build a desktop distribution
-
-```bash
-./gradlew :shared:packageDistributionForCurrentOS
-# Outputs land in shared/build/compose/binaries/{main,msi,dmg,deb}/
-```
-
-### Build the Android APK
+## Building from source
 
 ```bash
-./gradlew :app:assembleDebug
-# APK at app/build/outputs/apk/debug/app-debug.apk
+git clone https://github.com/Wizdier/WaveStream.git
+cd WaveStream
+./gradlew assembleStableDebug
 ```
 
-## Project Structure
+Requirements: JDK 17, Android SDK (compileSdk per `gradle/libs.versions.toml`).
 
-```
-wavestream/
-├── library/                       # CloudStream library module (patched)
-│   └── src/
-│       ├── commonMain/kotlin/com/lagradost/cloudstream3/
-│       │   ├── MainAPI.kt         # Patched: dayOfMonth() fix, stremio:// pass-through
-│       │   ├── utils/AtomicList.kt# Rewritten without kotlinx.atomicfu
-│       │   ├── utils/ExtractorApi.kt  # Patched: YoutubeExtractor removed
-│       │   └── plugins/
-│       │       ├── PluginManager.kt       # Object that loads .cs3/.jar plugins
-│       │       ├── BasePlugin.kt          # Base class for all plugins
-│       │       ├── RepositoryManager.kt   # CS repository parsing + plugin download
-│       │       └── Platform.kt            # expect/actual isDesktopPlatform()
-│       ├── androidMain/           # Android-specific: PathClassLoader-based plugin loading
-│       └── desktopMain/           # Desktop-specific: URLClassLoader-based plugin loading
-├── shared/                        # Compose Multiplatform UI
-│   └── src/
-│       ├── commonMain/kotlin/com/wavestream/
-│       │   ├── App.kt             # Root composable + NavHost + side-channel nav args
-│       │   ├── WaveAppInit.kt     # Boot orchestrator (loads plugins, exposes StateFlow)
-│       │   ├── RepositoryStore.kt # Bridges platform prefs <-> RepositoryManager
-│       │   ├── platform/          # expect/actual platform abstraction
-│       │   ├── stremio/           # Stremio addon client + provider adapter
-│       │   └── ui/
-│       │       ├── theme/         # WaveTheme, WaveTypography
-│       │       ├── components/    # PosterCard (shimmer+press), States, WaveBottomBar
-│       │       ├── player/        # WaveVideoPlayer expect/actual
-│       │       ├── library/       # LibraryStore + LibraryEntry
-│       │       └── screens/       # home, search, details, player, library, downloads, extensions, settings
-│       ├── androidMain/           # Android Context init, AndroidPreferences
-│       └── desktopMain/           # Desktop entry point + JSON-file preferences
-├── app/                           # Android application
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       └── kotlin/com/wavestream/app/MainActivity.kt
-├── gradle/
-│   ├── libs.versions.toml         # All version pins and library coordinates
-│   └── wrapper/                   # Gradle 8.10.2
-├── .github/workflows/build.yml    # CI: Desktop JVM + Android APK
-├── settings.gradle.kts
-├── build.gradle.kts
-└── gradle.properties
+Optional API keys (for tracker login) go into `local.properties`:
+
+```properties
+simkl.id=...
+simkl.secret=...
+mal.key=...
+anilist.key=...
 ```
 
-## Verification
+## Extension development
 
-After building, verify real CloudStream plugins load:
+Extensions are developed exactly as for CloudStream — see the
+[official docs](https://recloudstream.github.io/csdocs/devs/gettingstarted/).
+The plugin API package remains `com.lagradost.cloudstream3`, so any plugin built
+for CloudStream is a WaveStream plugin too.
 
-1. Download `https://raw.githubusercontent.com/recloudstream/extensions/builds/DailymotionProvider.jar`
-2. Drop the file into `~/.wavestream/Extensions/` (desktop) or `/sdcard/Android/data/com.wavestream.app/files/Wavestream/Extensions/` (Android)
-3. Launch the app — the Extensions tab should list "DailymotionProvider"
-4. Search "test" — Dailymotion results should appear
+## DMCA / Copyright
 
-The build succeeds when `./gradlew :shared:compileKotlinDesktop` passes.
+WaveStream does not host, upload or manage any videos, films or content. It has no
+video sources built in; it is a client that renders content from extensions installed
+by the user, functioning like a search engine. Please do not create or use extensions
+that infringe copyright.
 
-## Patches Applied to the CloudStream Library
+## Credits & License
 
-The library module is a verbatim copy of CloudStream 3's `library/` module with these patches:
-
-1. **Removed files requiring unavailable dependencies**:
-   - `metaproviders/` (TMDB/Trakt/MyDramaList sync providers)
-   - `extractors/YoutubeExtractor.kt` (uses Android MediaController)
-
-2. **`AtomicList.kt` rewritten** — removes `kotlinx.atomicfu` dependency; uses plain `synchronized(this) { ... }` instead. Public API is identical.
-
-3. **`MainAPI.kt` patched**:
-   - `isUpcoming()`: `day()` → `dayOfMonth()` (the older API was removed in kotlinx-datetime 0.6.0)
-   - `fixUrl()`: added `stremio:` to the pass-through list so synthetic Stremio deep-links aren't mangled
-
-4. **`ExtractorApi.kt` patched** — removed `YoutubeExtractor` imports and entries from `extractorApis`.
-
-5. **New plugin infrastructure** in `library/src/commonMain/kotlin/com/lagradost/cloudstream3/plugins/`:
-   - `PluginManager.kt` — object that scans a directory and loads each `.cs3`/`.jar`
-   - `BasePlugin.kt` — abstract base class with `registerMainAPI`/`registerExtractorAPI`/`CloudstreamPlugin` annotation
-   - `RepositoryManager.kt` — parses `repo.json`, downloads plugins with SHA-256 verification and atomic moves
-   - Platform-specific `PluginManager.android.kt` (PathClassLoader) and `PluginManager.desktop.kt` (URLClassLoader with class scanning fallback)
-   - `Platform.kt` expect/actual for `isDesktopPlatform()`
-
-## License
-
-GPL-3.0 — inherited from CloudStream 3. See [LICENSE](LICENSE).
-
-## Credits
-
-- [recloudstream/cloudstream](https://github.com/recloudstream/cloudstream) — the upstream project this is forked from. All credit for the plugin architecture, provider API, and extractor ecosystem goes to the CloudStream team.
-- [JetBrains Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/) — the UI framework that lets us share the entire UI layer across Android and Desktop.
-- [coil-kt/coil3](https://github.com/coil-kt/coil) — image loading with shimmer-friendly state callbacks.
+WaveStream is based on [CloudStream](https://github.com/recloudstream/cloudstream) by the
+recloudstream team and contributors. Licensed under the
+[GNU General Public License v3.0](LICENSE) — this fork keeps the same license, and its
+full source is available in this repository.
